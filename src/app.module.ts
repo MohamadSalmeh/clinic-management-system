@@ -14,23 +14,36 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PatientsModule } from './patients/patients.module';
 import { UsersModule } from './users/users.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { RatingsModule } from './ratings/ratings.module';
+import { PaymentsModule } from './payments/payments.module';
+import { QueuesModule } from './queues/queues.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST ?? 'localhost',
-      port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME ?? 'postgres',
-      password: process.env.DB_PASSWORD ?? 'postgres',
-      database: process.env.DB_NAME ?? 'clinic_system',
-      autoLoadEntities: true,
-      synchronize: process.env.DB_SYNCHRONIZE === 'true',
-      ssl:
-        process.env.DB_SSL === 'true'
-          ? { rejectUnauthorized: false }
-          : false,
+    ConfigModule.forRoot({
+      isGlobal: true, // Make the ConfigModule available globally
+      envFilePath: process.env.NODE_ENV
+        ? `.env.${process.env.NODE_ENV}`
+        : '.env',
     }),
+
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => {
+        return {
+          type: 'postgres',
+          database: config.get<string>('DB_DB'),
+          username: config.get<string>('DB_USERNAME'),
+          password: config.get<string>('DB_PASSWORD'),
+          host: config.get<string>('DB_HOST'),
+          port: config.get<number>('DB_PORT'),
+          synchronize: process.env.NODE_ENV !== 'production', // Synchronize only in non-production environments
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        };
+      },
+    }),
+
     UsersModule,
     AppointmentsModule,
     DoctorsModule,
@@ -43,6 +56,9 @@ import { WalletsModule } from './wallets/wallets.module';
     MedicalProfilesModule,
     NotificationsModule,
     WalletsModule,
+    RatingsModule,
+    PaymentsModule,
+    QueuesModule,
   ],
   controllers: [],
   providers: [AppService],

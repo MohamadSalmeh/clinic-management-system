@@ -53,7 +53,7 @@ export class MedicalProfile extends BaseEntity {
   @Column({ name: 'vaccination_status', type: 'jsonb', nullable: true })
   vaccinationStatus!: string[] | null;
 
-  @OneToOne(() => PatientProfile, {
+  @OneToOne(() => PatientProfile, (patientProfile) => patientProfile.medicalProfile, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'patient_profile_id' })

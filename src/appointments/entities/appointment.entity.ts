@@ -3,7 +3,12 @@ import { Clinic } from '../../clinics/entities/clinic.entity';
 import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
 import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
 import { PatientProfile } from '../../patients/entities/patient-profile.entity';
-import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
+import { Notification } from '../../notifications/entities/notification.entity';
+import { MedicalProfileLog } from '../../medical-profile-logs/entities/medical-profile-log.entity';
+import { Payment } from '../../payments/entities/payment.entity';
+import { Rating } from '../../ratings/entities/rating.entity';
+import { Queue } from '../../queues/entities/queue.entity';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 
 @Entity({ name: 'appointments' })
 export class Appointment extends BaseEntity {
@@ -91,4 +96,19 @@ export class Appointment extends BaseEntity {
   })
   @JoinColumn({ name: 'scheduling_id' })
   scheduling!: DoctorSchedule;
+
+  @OneToMany(() => Notification, (notification) => notification.appointment)
+  notifications!: Notification[];
+
+  @OneToMany(() => MedicalProfileLog, (log) => log.appointment)
+  medicalHistory!: MedicalProfileLog[];
+
+  @OneToOne(() => Payment, (payment) => payment.appointment)
+  payment!: Payment;
+
+  @OneToOne(() => Rating, (rating) => rating.appointment)
+  rating!: Rating;
+
+  @OneToOne(() => Queue, (queue) => queue.appointment)
+  queue!: Queue;
 }

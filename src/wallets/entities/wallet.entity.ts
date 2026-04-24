@@ -1,7 +1,8 @@
 import { Expose } from 'class-transformer';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
-import { Column, Entity, JoinColumn, OneToOne } from 'typeorm';
+import { Payment } from '../../payments/entities/payment.entity';
+import { Column, Entity, JoinColumn, OneToOne, OneToMany } from 'typeorm';
 import { WalletStatus } from '../enums/wallet-status.enum';
 
 @Entity({ name: 'wallets' })
@@ -28,4 +29,7 @@ export class Wallet extends BaseEntity {
   @OneToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user!: User;
+
+  @OneToMany(() => Payment, (payment) => payment.wallet)
+  payments!: Payment[];
 }

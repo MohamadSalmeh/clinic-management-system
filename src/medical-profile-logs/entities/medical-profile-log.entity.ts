@@ -9,6 +9,7 @@ import {
 import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
+import { Appointment } from '../../appointments/entities/appointment.entity';
 
 @Entity({ name: 'medical_profile_logs' })
 export class MedicalProfileLog extends BaseEntity {
@@ -40,4 +41,11 @@ export class MedicalProfileLog extends BaseEntity {
   })
   @JoinColumn({ name: 'medical_profile_id' })
   medicalProfile!: MedicalProfile;
+
+  @ManyToOne(() => Appointment, (appointment) => appointment.medicalHistory, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'appointment_id' })
+  appointment?: Appointment | null;
 }

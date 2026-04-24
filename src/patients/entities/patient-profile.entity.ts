@@ -2,6 +2,8 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { Appointment } from '../../appointments/entities/appointment.entity';
 import { MaritalStatus } from '../../users/enums/marital-status.enum';
 import { User } from '../../users/entities/user.entity';
+import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
+import { Rating } from '../../ratings/entities/rating.entity';
 import { Column, Entity, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 
 @Entity({ name: 'patient_profiles' })
@@ -26,6 +28,12 @@ export class PatientProfile extends BaseEntity {
   })
   @JoinColumn({ name: 'userId' })
   user!: User;
+
+  @OneToOne(() => MedicalProfile, (medicalProfile) => medicalProfile.patientProfile)
+  medicalProfile!: MedicalProfile;
+
+  @OneToMany(() => Rating, (rating) => rating.patient)
+  ratings!: Rating[];
 
   @OneToMany(() => Appointment, (appointment) => appointment.patient)
   appointments!: Appointment[];

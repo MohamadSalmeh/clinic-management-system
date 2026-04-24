@@ -12,6 +12,7 @@ import { NotificationPriority } from '../enums/notification-priority.enum';
 import { NotificationStatus } from '../enums/notification-status.enum';
 import { NotificationType } from '../enums/notification-type.enum';
 import {BaseEntity} from "../../common/entities/base.entity";
+import { Appointment } from '../../appointments/entities/appointment.entity';
 
 @Entity({ name: 'notifications' })
 export class Notification extends BaseEntity {
@@ -58,7 +59,11 @@ export class Notification extends BaseEntity {
   @Column({ name: 'action_url', type: 'text', nullable: true })
   actionUrl!: string | null;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, (user) => user.notifications, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user!: User;
+
+  @ManyToOne(() => Appointment, (appointment) => appointment.notifications, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'appointment_id' })
+  appointment!: Appointment | null;
 }
