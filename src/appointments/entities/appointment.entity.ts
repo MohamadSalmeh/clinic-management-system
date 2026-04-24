@@ -1,0 +1,94 @@
+import { BaseEntity } from '../../common/entities/base.entity';
+import { Clinic } from '../../clinics/entities/clinic.entity';
+import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
+import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
+import { PatientProfile } from '../../patients/entities/patient-profile.entity';
+import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
+
+@Entity({ name: 'appointments' })
+export class Appointment extends BaseEntity {
+  @Column({ name: 'patient_id', type: 'bigint' })
+  patientId!: number;
+
+  @Column({ name: 'doctor_id', type: 'bigint' })
+  doctorId!: number;
+
+  @Column({ name: 'clinic_id', type: 'bigint' })
+  clinicId!: number;
+
+  @Column({ name: 'scheduling_id', type: 'bigint' })
+  schedulingId!: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  type!: string;
+
+  @Column({ type: 'enum', enum: ['1', '2'] })
+  priority!: string;
+
+  @Column({ type: 'enum', enum: ['confirmed', 'cancelled', 'completed', 'no_show'] })
+  status!: string;
+
+  @Column({
+    name: 'payment_status',
+    type: 'enum',
+    enum: ['paid', 'unpaid', 'partial', 'refunded'],
+  })
+  paymentStatus!: string;
+
+  @Column({ name: 'requested_date', type: 'date' })
+  requestedDate!: Date;
+
+  @Column({ name: 'start_time', type: 'time' })
+  startTime!: string;
+
+  @Column({ name: 'end_time', type: 'time' })
+  endTime!: string;
+
+  @Column({ name: 'actual_start_time', type: 'timestamp', nullable: true })
+  actualStartTime!: Date | null;
+
+  @Column({ name: 'actual_end_time', type: 'timestamp', nullable: true })
+  actualEndTime!: Date | null;
+
+  @Column({ name: 'reason_for_visit', type: 'text', nullable: true })
+  reasonForVisit!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  symptoms!: string | null;
+
+  @Column({ name: 'cancellation_reason', type: 'text', nullable: true })
+  cancellationReason!: string | null;
+
+  @Column({ name: 'cancelled_at', type: 'timestamp', nullable: true })
+  cancelledAt!: Date | null;
+
+  @Column({ name: 'checkin_time', type: 'timestamp', nullable: true })
+  checkinTime!: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  notes!: string | null;
+
+  @ManyToOne(() => PatientProfile, (patient) => patient.appointments, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'patient_id' })
+  patient!: PatientProfile;
+
+  @ManyToOne(() => DoctorProfile, (doctor) => doctor.appointments, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'doctor_id' })
+  doctor!: DoctorProfile;
+
+  @ManyToOne(() => Clinic, (clinic) => clinic.appointments, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'clinic_id' })
+  clinic!: Clinic;
+
+  @ManyToOne(() => DoctorSchedule, (schedule) => schedule.appointments, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'scheduling_id' })
+  scheduling!: DoctorSchedule;
+}

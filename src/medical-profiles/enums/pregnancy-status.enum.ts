@@ -1,0 +1,5 @@
+export enum PregnancyStatus {
+  NOT_PREGNANT = 'NOT_PREGNANT',
+  PREGNANT = 'PREGNANT',
+  BREASTFEEDING = 'BREASTFEEDING',
+}
