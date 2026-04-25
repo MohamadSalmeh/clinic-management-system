@@ -100,9 +100,7 @@ export class Appointment extends BaseEntity {
   @OneToMany(() => Notification, (notification) => notification.appointment)
   notifications!: Notification[];
 
-  @OneToMany(() => MedicalProfileLog, (log) => log.appointment)
-  medicalHistory!: MedicalProfileLog[];
-
+ 
   @OneToOne(() => Payment, (payment) => payment.appointment)
   payment!: Payment;
 
