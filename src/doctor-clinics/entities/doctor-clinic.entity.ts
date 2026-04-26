@@ -4,6 +4,7 @@ import {
     Column,
     CreateDateColumn,
     Entity,
+    Index,
     JoinColumn,
     ManyToOne,
     Unique,
@@ -13,9 +14,11 @@ import { Clinic } from '../../clinics/entities/clinic.entity';
 @Entity({ name: 'doctor_clinic' })
 @Unique('unique_doctor_clinic', ['clinicId', 'doctorId'])
 export class DoctorClinic extends BaseEntity {
+    @Index()
     @Column({ name: 'clinic_id', type: 'bigint' })
     clinicId!: number;
 
+    @Index()
     @Column({ name: 'doctor_id', type: 'bigint' })
     doctorId!: number;
 

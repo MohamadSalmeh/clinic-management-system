@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -18,6 +19,7 @@ import { Appointment } from '../../appointments/entities/appointment.entity';
 export class Notification extends BaseEntity {
   
 
+  @Index()
   @Column({ name: 'user_id', type: 'bigint' })
   userId!: number;
 
@@ -40,6 +42,7 @@ export class Notification extends BaseEntity {
   @Column({ name: 'related_entity_type', type: 'varchar', length: 50, nullable: true })
   relatedEntityType!: string | null;
 
+  @Index()
   @Column({ name: 'related_entity_id', type: 'bigint', nullable: true })
   relatedEntityId!: number | null;
 
@@ -63,6 +66,7 @@ export class Notification extends BaseEntity {
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
+  @Index()
   @ManyToOne(() => Appointment, (appointment) => appointment.notifications, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'appointment_id' })
   appointment!: Appointment | null;

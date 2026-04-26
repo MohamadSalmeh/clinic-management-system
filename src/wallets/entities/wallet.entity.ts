@@ -2,11 +2,12 @@ import { Expose } from 'class-transformer';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Payment } from '../../payments/entities/payment.entity';
-import { Column, Entity, JoinColumn, OneToOne, OneToMany } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, OneToOne, OneToMany } from 'typeorm';
 import { WalletStatus } from '../enums/wallet-status.enum';
 
 @Entity({ name: 'wallets' })
 export class Wallet extends BaseEntity {
+  @Index()
   @Column({ name: 'user_id', type: 'bigint', unique: true })
   userId!: number;
 

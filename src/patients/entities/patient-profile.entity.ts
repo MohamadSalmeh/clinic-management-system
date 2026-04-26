@@ -4,10 +4,11 @@ import { MaritalStatus } from '../../users/enums/marital-status.enum';
 import { User } from '../../users/entities/user.entity';
 import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
 import { Rating } from '../../ratings/entities/rating.entity';
-import { Column, Entity, JoinColumn, OneToMany, OneToOne } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 
 @Entity({ name: 'patient_profiles' })
 export class PatientProfile extends BaseEntity {
+  @Index()
   @Column({ type: 'bigint', unique: true })
   userId!: number;
 
@@ -32,7 +33,7 @@ export class PatientProfile extends BaseEntity {
   @OneToOne(() => MedicalProfile, (medicalProfile) => medicalProfile.patientProfile)
   medicalProfile!: MedicalProfile;
 
-  @OneToMany(() => Rating, (rating) => rating.patient)
+  @OneToMany(() => Rating, (rating) => rating.patientProfile)
   ratings!: Rating[];
 
   @OneToMany(() => Appointment, (appointment) => appointment.patient)

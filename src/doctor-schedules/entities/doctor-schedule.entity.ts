@@ -2,15 +2,33 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { Appointment } from '../../appointments/entities/appointment.entity';
 import { Clinic } from '../../clinics/entities/clinic.entity';
 import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
-import { Check, Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+
+export enum DoctorScheduleType {
+  NORMAL = 'NORMAL',
+  BREAK = 'BREAK',
+  EMERGENCY = 'EMERGENCY',
+}
 
 @Entity({ name: 'doctor_schedules' })
 @Check('CHK_doctor_schedules_day_of_week_range', '"day_of_week" >= 0 AND "day_of_week" <= 6')
+@Check('CHK_doctor_schedules_end_time_after_start_time', '"end_time" > "start_time"')
 export class DoctorSchedule extends BaseEntity {
-  @Column({ name: 'doctor_profile_id', type: 'bigint' })
+  @Index()
+  @Column({
+    name: 'doctor_profile_id',
+    type: 'bigint',
+    transformer: new ColumnNumericTransformer(),
+  })
   doctorProfileId!: number;
 
-  @Column({ name: 'clinic_id', type: 'bigint' })
+  @Index()
+  @Column({
+    name: 'clinic_id',
+    type: 'bigint',
+    transformer: new ColumnNumericTransformer(),
+  })
   clinicId!: number;
 
   @Column({ name: 'day_of_week', type: 'int' })
@@ -23,11 +41,12 @@ export class DoctorSchedule extends BaseEntity {
   endTime!: string;
 
   @Column({
-    name: 'is_booking_allowed',
-    type: 'boolean',
-    default: true
+    type: 'enum',
+    enum: DoctorScheduleType,
+    default: DoctorScheduleType.NORMAL,
   })
-  isBookingAllowed!: boolean;
+  type!: DoctorScheduleType;
+
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;

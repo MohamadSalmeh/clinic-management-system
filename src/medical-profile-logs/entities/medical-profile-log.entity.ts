@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -14,9 +15,11 @@ import { Appointment } from '../../appointments/entities/appointment.entity';
 @Entity({ name: 'medical_profile_logs' })
 export class MedicalProfileLog extends BaseEntity {
 
+  @Index()
   @Column({ name: 'medical_profile_id', type: 'bigint' })
   medicalProfileId!: number;
 
+  @Index()
   @Column({ name: 'changed_by_id', type: 'bigint' })
   changedById!: number;
 
@@ -42,6 +45,7 @@ export class MedicalProfileLog extends BaseEntity {
   @JoinColumn({ name: 'medical_profile_id' })
   medicalProfile!: MedicalProfile;
 
+  @Index()
   @ManyToOne(() => Appointment, (appointment) => appointment.medicalHistory, {
     onDelete: 'SET NULL',
     nullable: true,

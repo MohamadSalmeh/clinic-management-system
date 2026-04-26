@@ -4,11 +4,14 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { DoctorClinic } from '../../doctor-clinics/entities/doctor-clinic.entity';
 import { DoctorProfileStatus } from '../../users/enums/doctor-profile-status.enum';
 import { User } from '../../users/entities/user.entity';
-import { Column, Entity, JoinColumn, OneToMany, OneToOne } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
+import { Queue } from '../../queues/entities/queue.entity';
+import { Rating } from '../../ratings/entities/rating.entity';
 
 @Entity({ name: 'doctor_profiles' })
 export class DoctorProfile extends BaseEntity {
+    @Index()
     @Column({ type: 'bigint', unique: true })
     userId!: number;
 
@@ -63,6 +66,12 @@ export class DoctorProfile extends BaseEntity {
 
     @OneToMany(() => Appointment, (appointment) => appointment.doctor)
     appointments!: Appointment[];
+
+    @OneToMany(() => Queue, (queue) => queue.doctor)
+    queues!: Queue[];
+
+    @OneToMany(() => Rating, (rating) => rating.doctorProfile)
+    ratings!: Rating[];
 
     @Expose({ name: 'clinics_count' })
     get clinicCount(): number {

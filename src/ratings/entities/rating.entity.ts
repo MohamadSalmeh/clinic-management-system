@@ -1,34 +1,36 @@
-import { Check, Column, Entity, JoinColumn, ManyToOne, OneToOne } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToOne, Unique } from 'typeorm';
 import { Expose } from 'class-transformer';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { Appointment } from '../../appointments/entities/appointment.entity';
 import { PatientProfile } from '../../patients/entities/patient-profile.entity';
 import { User } from '../../users/entities/user.entity';
 import { RatingStatus } from '../enums/rating-status.enum';
+import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
 
 @Entity({ name: 'ratings' })
 @Check('"score" >= 1 AND "score" <= 5')
+@Unique(['appointmentId', 'patientProfileId'])
 export class Rating extends BaseEntity {
   
-  @Column({ name: 'patient_user_id', type: 'bigint' })
-  patientUserId!: number;
+ @Index()
+ @Column({ name: 'patient_profile_id', type: 'bigint' })
+  patientProfileId!: number;
 
-  @Column({ name: 'doctor_user_id', type: 'bigint' })
-  doctorUserId!: number;
+  @Index()
+  @Column({ name: 'doctor_profile_id', type: 'bigint' })
+  doctorProfileId!: number;
 
+  @Index()
   @Column({ name: 'appointment_id', type: 'bigint' })
   appointmentId!: number;
 
-  @Column({ type: 'smallint' })
-  score!: number;
-
-  @Column({ type: 'varchar', length: 255 })
-  title!: string;
+  @Column({ type: 'smallint' ,nullable: true })
+  score!: number|null;
 
   @Column({ type: 'text', nullable: true })
   comment!: string | null;
 
-  @Column({ type: 'enum', enum: RatingStatus, default: RatingStatus.PENDING })
+  @Column({ type: 'enum', enum: RatingStatus, default: RatingStatus.VISIBLE })
   status!: RatingStatus;
 
   // Derived Properties
@@ -37,42 +39,25 @@ export class Rating extends BaseEntity {
     if (this.score === 5) return 'Excellent';
     if (this.score === 4) return 'Very Good';
     if (this.score === 3) return 'Good';
-    if (this.score === 2) return 'Acceptable'; // or Fair/Satisfactory
+    if (this.score === 2) return 'Acceptable';
     if (this.score === 1) return 'Poor';
     return 'Unrated';
   }
 
   @Expose({ name: 'is_positive' })
   get isPositive(): boolean {
-    return this.score >= 4;
+    return this.score !== null && this.score >= 4;
   }
 
-  @Expose({ name: 'is_verified_rating' })
-  get isVerifiedRating(): boolean {
-    // Basic verification logic, normally this could check if appointment was COMPLETED
-    return !!this.appointmentId && this.status !== RatingStatus.DELETED;
-  }
-
-  @Expose({ name: 'weighted_score' })
-  get weightedScore(): string {
-    // Weighted score can be just the score for now, maybe * 1.0 or something
-    return (this.score * 1.0).toFixed(2);
-  }
-
-  // Relations
   @OneToOne(() => Appointment, (appointment) => appointment.rating)
   @JoinColumn({ name: 'appointment_id' })
   appointment!: Appointment;
 
   @ManyToOne(() => PatientProfile, (patient) => patient.ratings)
-  @JoinColumn({ name: 'patient_id' }) // Notice: the schema says patient_user_id was intended, but standard approach was to link PatientProfile
-  patient!: PatientProfile;
+  @JoinColumn({ name: 'patient_profile_id' }) 
+  patientProfile!: PatientProfile;
 
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'patient_user_id' })
-  patientUser!: User;
-
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'doctor_user_id' })
-  doctorUser!: User;
+  @ManyToOne(() => DoctorProfile, (doctor) => doctor.ratings)
+  @JoinColumn({ name: 'doctor_profile_id' })
+  doctorProfile!: DoctorProfile;
 }

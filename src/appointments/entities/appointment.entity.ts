@@ -8,19 +8,26 @@ import { MedicalProfileLog } from '../../medical-profile-logs/entities/medical-p
 import { Payment } from '../../payments/entities/payment.entity';
 import { Rating } from '../../ratings/entities/rating.entity';
 import { Queue } from '../../queues/entities/queue.entity';
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, OneToOne } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne } from 'typeorm';
+import { MedicalHistory } from '../../medical-histories/entities/medical-history.entity';
+import { Referral } from '../../referrals/entities/referral.entity';
 
 @Entity({ name: 'appointments' })
+@Check(`"end_time" > "start_time"`)
 export class Appointment extends BaseEntity {
+  @Index()
   @Column({ name: 'patient_id', type: 'bigint' })
   patientId!: number;
 
+  @Index()
   @Column({ name: 'doctor_id', type: 'bigint' })
   doctorId!: number;
 
+  @Index()
   @Column({ name: 'clinic_id', type: 'bigint' })
   clinicId!: number;
 
+  @Index()
   @Column({ name: 'scheduling_id', type: 'bigint' })
   schedulingId!: number;
 
@@ -100,8 +107,8 @@ export class Appointment extends BaseEntity {
   @OneToMany(() => Notification, (notification) => notification.appointment)
   notifications!: Notification[];
 
-  @OneToMany(() => MedicalProfileLog, (log) => log.appointment)
-  medicalHistory!: MedicalProfileLog[];
+  @OneToMany(() => MedicalHistory, (history) => history.appointment)
+  medicalHistory!: MedicalHistory[];
 
   @OneToOne(() => Payment, (payment) => payment.appointment)
   payment!: Payment;
@@ -111,4 +118,7 @@ export class Appointment extends BaseEntity {
 
   @OneToOne(() => Queue, (queue) => queue.appointment)
   queue!: Queue;
+
+  @OneToOne(() => Referral, (referral) => referral.appointment)
+  referral!: Referral;
 }

@@ -3,15 +3,18 @@ import { PatientProfile } from '../../patients/entities/patient-profile.entity';
 import {
   Column,
   Entity,
+  Index,
   JoinColumn,
   OneToMany,
   OneToOne,
 } from 'typeorm';
 import { MedicalProfileLog } from '../../medical-profile-logs/entities/medical-profile-log.entity';
 import { PregnancyStatus } from '../enums/pregnancy-status.enum';
+import { MedicalHistory } from '../../medical-histories/entities/medical-history.entity';
 
 @Entity({ name: 'medical_profiles' })
 export class MedicalProfile extends BaseEntity {
+  @Index()
   @Column({ name: 'patient_profile_id', type: 'bigint', unique: true })
   patientProfileId!: number;
 
@@ -61,4 +64,7 @@ export class MedicalProfile extends BaseEntity {
 
   @OneToMany(() => MedicalProfileLog, (log) => log.medicalProfile)
   logs!: MedicalProfileLog[];
+
+  @OneToMany(() => MedicalHistory, (history) => history.medicalProfile)
+  medicalHistories!: MedicalHistory[];
 }

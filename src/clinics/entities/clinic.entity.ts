@@ -5,6 +5,7 @@ import { DoctorClinic } from '../../doctor-clinics/entities/doctor-clinic.entity
 import { Column, Entity, OneToMany } from 'typeorm';
 import { ClinicStatus } from '../enums/clinic-status.enum';
 import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
+import { Queue } from '../../queues/entities/queue.entity';
 
 @Entity({ name: 'clinics' })
 export class Clinic extends BaseEntity {
@@ -28,6 +29,9 @@ export class Clinic extends BaseEntity {
 
     @OneToMany(() => Appointment, (appointment) => appointment.clinic)
     appointments!: Appointment[];
+
+    @OneToMany(() => Queue, (queue) => queue.clinic)
+    queues!: Queue[];
 
     @Expose({ name: 'doctors_count' })
     get doctorsCount(): number {

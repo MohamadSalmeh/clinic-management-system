@@ -1,5 +1,8 @@
 import { PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
+
+
+
 export abstract class BaseEntity {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: number;
@@ -11,3 +14,4 @@ export abstract class BaseEntity {
   updated_at!: Date;
   
 }
+
