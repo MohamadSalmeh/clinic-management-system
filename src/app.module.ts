@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AppService } from './app.service';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { AuthModule } from './auth/auth.module';
 import { ClinicsModule } from './clinics/clinics.module';
 import { DoctorClinicsModule } from './doctor-clinics/doctor-clinics.module';
 import { DoctorSchedulesModule } from './doctor-schedules/doctor-schedules.module';
@@ -45,6 +46,7 @@ import { QueuesModule } from './queues/queues.module';
     }),
 
     UsersModule,
+    AuthModule,
     AppointmentsModule,
     DoctorsModule,
     PatientsModule,

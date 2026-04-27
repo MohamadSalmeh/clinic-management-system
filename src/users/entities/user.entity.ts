@@ -24,9 +24,9 @@ export class User extends BaseEntity {
 	@Column({ type: 'varchar', length: 255, unique: true })
 	email!: string;
 
-	@Column({ type: 'varchar', select: false })
+	@Column({ type: 'varchar', select: false, nullable: true })
 	@Exclude({ toPlainOnly: true })
-	password!: string;
+	password!: string | null;
 
 	@Column({ type: 'varchar', length: 20 })
 	phone!: string;
