@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { ROLES_KEY } from '../../common/decorators';
 import { ActiveUserData, CURRENT_USER_KEY, UserRole } from '../../utils';
+import { AuthSessionProvider } from '../providers';
 
 type RequestWithUser = Request & {
   [CURRENT_USER_KEY]?: ActiveUserData;
@@ -22,6 +23,7 @@ export class AuthRolesGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly authSessionProvider: AuthSessionProvider,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -36,6 +38,10 @@ export class AuthRolesGuard implements CanActivate {
 
     if (!token) {
       throw new UnauthorizedException('Missing or invalid authorization header');
+    }
+
+    if (this.authSessionProvider.isTokenRevoked(token)) {
+      throw new UnauthorizedException('Token has been revoked');
     }
 
     const jwtSecret = this.configService.get<string>('JWT_SECRET');

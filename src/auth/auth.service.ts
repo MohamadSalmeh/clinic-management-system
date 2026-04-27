@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,6 +16,8 @@ import { Gender } from '../users/enums/gender.enum';
 import { PreferredLanguage } from '../users/enums/preferredLanguage.enum';
 import { ThemeMode } from '../users/enums/themeMode.enum';
 import { GoogleUserData } from './strategies';
+import { AuthSessionProvider } from './providers';
+import { UserStatus } from '../users/enums/user-status.enum';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +25,7 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly authHelperProvider: AuthHelperProvider,
+    private readonly authSessionProvider: AuthSessionProvider,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -135,6 +139,45 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async logout(userId: number, accessToken: string): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    this.authSessionProvider.revokeToken(accessToken);
+
+    return { message: 'Logged out successfully' };
+  }
+
+  async deactivateAccount(userId: number): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.status = UserStatus.INACTIVE;
+    user.isVerified = false;
+
+    await this.userRepository.save(user);
+
+    return this.userRepository.findOneOrFail({ where: { id: userId } });
+  }
+
+  async deleteAccount(userId: number): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.userRepository.remove(user);
+
+    return { message: 'Account deleted successfully' };
   }
 
   private async buildAuthResponse(user: User): Promise<AuthResponse> {

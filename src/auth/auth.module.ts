@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -7,12 +7,12 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthRolesGuard } from './guards';
-import { AuthHelperProvider } from './providers';
+import { AuthHelperProvider, AuthSessionProvider } from './providers';
 import { GoogleStrategy } from './strategies';
 
 @Module({
   imports: [
-    UsersModule,
+    forwardRef(() => UsersModule),
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -20,7 +20,19 @@ import { GoogleStrategy } from './strategies';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthHelperProvider, AuthRolesGuard, GoogleStrategy],
-  exports: [AuthService],
+  providers: [
+    AuthService,
+    AuthHelperProvider,
+    AuthSessionProvider,
+    AuthRolesGuard,
+    GoogleStrategy,
+  ],
+  exports: [
+    AuthService,
+    AuthHelperProvider,
+    AuthSessionProvider,
+    AuthRolesGuard,
+    JwtModule,
+  ],
 })
 export class AuthModule {}
