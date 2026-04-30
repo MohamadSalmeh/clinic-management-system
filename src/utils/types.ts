@@ -20,4 +20,5 @@ export type AuthResponse = {
     role: UserRole;
     fullName: string;
   };
+  profileCompleted: boolean;
 };

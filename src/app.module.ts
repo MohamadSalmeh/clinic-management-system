@@ -19,6 +19,7 @@ import { WalletsModule } from './wallets/wallets.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { PaymentsModule } from './payments/payments.module';
 import { QueuesModule } from './queues/queues.module';
+import { AdminsModule } from './admins/admins.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { QueuesModule } from './queues/queues.module';
     RatingsModule,
     PaymentsModule,
     QueuesModule,
+    AdminsModule,
   ],
   controllers: [],
   providers: [AppService],

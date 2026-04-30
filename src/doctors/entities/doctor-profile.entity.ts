@@ -4,10 +4,11 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { DoctorClinic } from '../../doctor-clinics/entities/doctor-clinic.entity';
 import { DoctorProfileStatus } from '../../users/enums/doctor-profile-status.enum';
 import { User } from '../../users/entities/user.entity';
-import { Column, Entity, Index, JoinColumn, OneToMany, OneToOne } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
 import { Queue } from '../../queues/entities/queue.entity';
 import { Rating } from '../../ratings/entities/rating.entity';
+import { AdminProfile } from '../../admins/entities/admin-profile.entity';
 
 @Entity({ name: 'doctor_profiles' })
 export class DoctorProfile extends BaseEntity {
@@ -15,36 +16,42 @@ export class DoctorProfile extends BaseEntity {
     @Column({ type: 'bigint', unique: true })
     userId!: number;
 
-    @Column({ type: 'varchar', length: 100 })
-    specialization!: string;
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    specialization!: string | null;
 
-    @Column({ name: 'sub_specialization', type: 'varchar', length: 100 })
-    subSpecialization!: string;
+    @Column({ name: 'sub_specialization', type: 'varchar', length: 100, nullable: true })
+    subSpecialization!: string | null;
 
-    @Column({ name: 'license_number', type: 'varchar', length: 100 })
-    licenseNumber!: string;
+    @Column({ name: 'license_number', type: 'varchar', length: 100, nullable: true })
+    licenseNumber!: string | null;
 
-    @Column({ name: 'experience_years', type: 'int' })
-    experienceYears!: number;
+    @Column({ name: 'experience_years', type: 'int', nullable: true })
+    experienceYears!: number | null;
 
-    @Column({ type: 'text' })
-    bio!: string;
+    @Column({ type: 'text', nullable: true })
+    bio!: string | null;
 
-
-    @Column({
-        name: 'initial_visit_fee', type: 'decimal', precision: 10, scale: 2, default: 0
-    })
-    initialVisitFee!: string;
 
     @Column({
-        name: 'return_visit_fee', type: 'decimal', precision: 10, scale: 2, default: 0
+        name: 'initial_visit_fee', type: 'decimal', precision: 10, scale: 2, nullable: true
     })
-    returnVisitFee!: string;
+    initialVisitFee!: string | null;
+
+    @Column({
+        name: 'return_visit_fee', type: 'decimal', precision: 10, scale: 2, nullable: true
+    })
+    returnVisitFee!: string | null;
     @Column({ name: 'languages_spoken', type: 'json', nullable: true, default: () => "'[]'" })
     languagesSpoken!: string[];
 
     @Column({ type: 'enum', enum: DoctorProfileStatus, default: DoctorProfileStatus.ACTIVE })
     status!: DoctorProfileStatus;
+
+    @Column({ name: 'is_approved', type: 'boolean', default: false })
+    isApproved!: boolean;
+
+    @Column({ name: 'invited_by_admin_id', type: 'bigint', nullable: true })
+    invitedByAdminId!: number | null;
 
     /*@Expose({ name: 'average_rating' })
     averageRating?: string;
@@ -57,6 +64,12 @@ export class DoctorProfile extends BaseEntity {
     })
     @JoinColumn({ name: 'userId' })
     user!: User;
+
+    @ManyToOne(() => AdminProfile, (admin) => admin.invitedDoctors, {
+        onDelete: 'SET NULL',
+    })
+    @JoinColumn({ name: 'invited_by_admin_id' })
+    invitedByAdmin?: AdminProfile | null;
 
     @OneToMany(() => DoctorClinic, (assignment) => assignment.doctor)
     clinicAssignments!: DoctorClinic[];

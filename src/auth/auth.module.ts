@@ -1,18 +1,25 @@
+import { DoctorInvitationsModule } from '../doctor-invitations/doctor-invitations.module';
+import { DoctorsModule } from '../doctors/doctors.module';
+
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { getJwtConfig } from './config';
 import { UsersModule } from '../users/users.module';
+import { AdminsModule } from '../admins/admins.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { AuthRolesGuard } from './guards';
+import { AuthOptionalGuard, AuthRolesGuard, GoogleAuthGuard } from './guards';
 import { AuthHelperProvider } from './providers';
 import { GoogleStrategy } from './strategies';
 
 @Module({
   imports: [
     UsersModule,
+    AdminsModule,
+    DoctorsModule,
+    DoctorInvitationsModule,
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -20,7 +27,14 @@ import { GoogleStrategy } from './strategies';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthHelperProvider, AuthRolesGuard, GoogleStrategy],
+  providers: [
+    AuthService,
+    AuthHelperProvider,
+    AuthRolesGuard,
+    AuthOptionalGuard,
+    GoogleAuthGuard,
+    GoogleStrategy,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

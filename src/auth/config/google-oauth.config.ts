@@ -9,13 +9,20 @@ export type GoogleOAuthConfig = {
 export const getGoogleOAuthConfig = (
   configService: ConfigService,
 ): GoogleOAuthConfig => {
+  const clientID = configService.get<string>('GOOGLE_CLIENT_ID');
+  const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
+
+  if (!clientID) {
+    throw new Error('Missing required environment variable: GOOGLE_CLIENT_ID');
+  }
+
+  if (!clientSecret) {
+    throw new Error('Missing required environment variable: GOOGLE_CLIENT_SECRET');
+  }
+
   return {
-    clientID:
-      configService.get<string>('GOOGLE_CLIENT_ID') ??
-      'GOOGLE_CLIENT_ID_PLACEHOLDER',
-    clientSecret:
-      configService.get<string>('GOOGLE_CLIENT_SECRET') ??
-      'GOOGLE_CLIENT_SECRET_PLACEHOLDER',
+    clientID,
+    clientSecret,
     callbackURL:
       configService.get<string>('GOOGLE_CALLBACK_URL') ??
       'http://localhost:3000/auth/google/callback',

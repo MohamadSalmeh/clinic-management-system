@@ -6,6 +6,7 @@ import {
 } from 'typeorm';
 import { Exclude, Expose } from 'class-transformer';
 import { BaseEntity } from '../../common/entities/base.entity';
+import { AdminProfile } from '../../admins/entities/admin-profile.entity';
 import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
 import { PatientProfile } from '../../patients/entities/patient-profile.entity';
 import { AgeGroup } from '../enums/age-group.enum';
@@ -24,12 +25,24 @@ export class User extends BaseEntity {
 	@Column({ type: 'varchar', length: 255, unique: true })
 	email!: string;
 
+	@Column({ type: 'varchar', length: 50, default: 'local' })
+	provider!: string;
+
+	@Column({
+		name: 'provider_id',
+		type: 'varchar',
+		length: 255,
+		nullable: true,
+		unique: true,
+	})
+	providerId!: string | null;
+
 	@Column({ type: 'varchar', select: false, nullable: true })
 	@Exclude({ toPlainOnly: true })
 	password!: string | null;
 
-	@Column({ type: 'varchar', length: 20 })
-	phone!: string;
+	@Column({ type: 'varchar', length: 20, nullable: true })
+	phone!: string | null;
 
 	@Column({ name: 'preferred_language', type: 'enum', enum: PreferredLanguage, default: PreferredLanguage.AR })
 	preferredLanguage!: PreferredLanguage;
@@ -40,20 +53,20 @@ export class User extends BaseEntity {
 	@Column({ name: 'first_name', type: 'varchar', length: 100 })
 	firstName!: string;
 
-	@Column({ name: 'father_name', type: 'varchar', length: 100 })
-	fatherName!: string;
+	@Column({ name: 'father_name', type: 'varchar', length: 100, nullable: true })
+	fatherName!: string | null;
 
 	@Column({ name: 'last_name', type: 'varchar', length: 100 })
 	lastName!: string;
 
-	@Column({ name: 'birth_date', type: 'date' })
-	birthDate!: Date;
+	@Column({ name: 'birth_date', type: 'date', nullable: true })
+	birthDate!: Date | null;
 
-	@Column({ type: 'enum', enum: Gender })
-	gender!: Gender;
+	@Column({ type: 'enum', enum: Gender, nullable: true })
+	gender!: Gender | null;
 
-	@Column({ type: 'text' })
-	address!: string;
+	@Column({ type: 'text', nullable: true })
+	address!: string | null;
 
 	@Column({ name: 'avatar_url', type: 'text', nullable: true })
 	avatarUrl?: string | null;
@@ -77,7 +90,11 @@ export class User extends BaseEntity {
 
 	@Expose({ name: 'full_name' })
 	get fullName(): string {
-		return `${this.firstName} ${this.fatherName} ${this.lastName}`.replace(/\s+/g, ' ').trim();
+		const nameParts = [this.firstName, this.fatherName, this.lastName].filter(
+			(part): part is string => Boolean(part),
+		);
+
+		return nameParts.join(' ').replace(/\s+/g, ' ').trim();
 	}
 
 	@Expose()
@@ -129,6 +146,13 @@ export class User extends BaseEntity {
 		{ nullable: true },
 	)
 	doctorProfile?: DoctorProfile | null;
+
+	@OneToOne(
+		() => AdminProfile,
+		(adminProfile) => adminProfile.user,
+		{ nullable: true },
+	)
+	adminProfile?: AdminProfile | null;
 
 	@OneToMany(() => Notification, (notification) => notification.user)
 	notifications!: Notification[];

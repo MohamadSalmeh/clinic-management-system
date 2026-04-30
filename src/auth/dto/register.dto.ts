@@ -2,7 +2,6 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
-  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -58,8 +57,4 @@ export class RegisterDto {
   @IsOptional()
   @IsEnum(ThemeMode)
   themeMode?: ThemeMode;
-
-  @IsOptional()
-  @IsIn(['ADMIN', 'DOCTOR', 'PATIENT'])
-  usertype?: 'ADMIN' | 'DOCTOR' | 'PATIENT';
 }
