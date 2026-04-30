@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Req,
   Res,
@@ -26,6 +28,12 @@ import { GoogleUserData } from './strategies';
 
 type GoogleAuthRequest = Request & {
   [CURRENT_USER_KEY]?: GoogleUserData;
+};
+
+type AuthenticatedRequest = Request & {
+  headers: Request['headers'] & {
+    authorization?: string;
+  };
 };
 
 @Controller('auth')
@@ -95,10 +103,37 @@ export class AuthController {
     return this.authService.registerDoctorFromInvite(token, dto);
   }
 
+  @Patch('deactivate-account')
+  @UseGuards(AuthRolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  async deactivateAccount(
+    @CurrentUser() currentUser: ActiveUserData | undefined,
+  ): Promise<User> {
+    if (!currentUser) {
+      throw new UnauthorizedException('Authenticated user is missing in request');
+    }
+
+    return this.authService.deactivateAccount(Number(currentUser.sub));
+  }
+
   @Get('me')
   @UseGuards(AuthRolesGuard)
   @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
   getMe(@CurrentUser() currentUser: ActiveUserData | undefined): ActiveUserData | undefined {
     return currentUser;
+  }
+
+  private extractTokenFromHeader(authorization?: string): string | null {
+    if (!authorization) {
+      return null;
+    }
+
+    const [type, token] = authorization.split(' ');
+
+    if (type !== 'Bearer' || !token) {
+      return null;
+    }
+
+    return token;
   }
 }

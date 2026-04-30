@@ -38,6 +38,7 @@ export class AuthRolesGuard implements CanActivate {
       throw new UnauthorizedException('Missing or invalid authorization header');
     }
 
+
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
 
     if (!jwtSecret) {

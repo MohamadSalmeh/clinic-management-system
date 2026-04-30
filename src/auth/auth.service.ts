@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -20,6 +21,7 @@ import { DoctorInvitation } from '../doctor-invitations/entities/doctor-invitati
 import { DoctorInvitationStatus } from '../doctor-invitations/enums/doctor-invitation-status.enum';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { AdminsService } from '../admins/admins.service';
+import { UserStatus } from '../users/enums/user-status.enum';
 
 @Injectable()
 export class AuthService {
@@ -316,6 +318,22 @@ export class AuthService {
 
     return user;
   }
+
+  async deactivateAccount(userId: number): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.status = UserStatus.INACTIVE;
+    user.isVerified = false;
+
+    await this.userRepository.save(user);
+
+    return this.userRepository.findOneOrFail({ where: { id: userId } });
+  }
+
 
   private async buildAuthResponse(user: User): Promise<AuthResponse> {
     const payload: JWTPayloadType = this.buildJwtPayload(user);

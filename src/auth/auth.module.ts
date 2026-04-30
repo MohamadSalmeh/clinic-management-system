@@ -1,7 +1,7 @@
 import { DoctorInvitationsModule } from '../doctor-invitations/doctor-invitations.module';
 import { DoctorsModule } from '../doctors/doctors.module';
 
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -16,10 +16,10 @@ import { GoogleStrategy } from './strategies';
 
 @Module({
   imports: [
-    UsersModule,
     AdminsModule,
     DoctorsModule,
     DoctorInvitationsModule,
+    forwardRef(() => UsersModule),
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -35,6 +35,6 @@ import { GoogleStrategy } from './strategies';
     GoogleAuthGuard,
     GoogleStrategy,
   ],
-  exports: [AuthService],
+  exports: [JwtModule,AuthService],
 })
 export class AuthModule {}
