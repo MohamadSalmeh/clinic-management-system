@@ -2,6 +2,7 @@ import { Expose } from 'class-transformer';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Payment } from '../../payments/entities/payment.entity';
+import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Column, Entity, Index, JoinColumn, OneToOne, OneToMany } from 'typeorm';
 import { WalletStatus } from '../enums/wallet-status.enum';
 
@@ -33,4 +34,7 @@ export class Wallet extends BaseEntity {
 
   @OneToMany(() => Payment, (payment) => payment.wallet)
   payments!: Payment[];
+
+  @OneToMany(() => Transaction, (transaction) => transaction.wallet)
+  transactions!: Transaction[];
 }

@@ -103,6 +103,14 @@ export class AuthController {
     return this.authService.registerDoctorFromInvite(token, dto);
   }
 
+  @Post('doctor-invite/:token/reject')
+  @HttpCode(200)
+  async rejectDoctorInvite(
+    @Param('token') token: string,
+  ): Promise<{ message: string }> {
+    return this.authService.rejectDoctorInviteToken(token);
+  }
+
   @Patch('deactivate-account')
   @UseGuards(AuthRolesGuard)
   @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)

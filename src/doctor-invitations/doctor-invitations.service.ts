@@ -107,6 +107,29 @@ export class DoctorInvitationsService {
         return this.invitationRepository.save(invitation);
     }
 
+    async rejectInvitationByToken(token: string): Promise<DoctorInvitation> {
+        const invitation = await this.invitationRepository.findOne({
+            where: { token },
+        });
+
+        if (!invitation) {
+            throw new NotFoundException('Invitation not found');
+        }
+
+        if (invitation.status !== DoctorInvitationStatus.PENDING) {
+            throw new BadRequestException('Invitation is not pending');
+        }
+
+        if (this.isExpired(invitation)) {
+            invitation.status = DoctorInvitationStatus.EXPIRED;
+            await this.invitationRepository.save(invitation);
+            throw new BadRequestException('Invitation has expired');
+        }
+
+        invitation.status = DoctorInvitationStatus.REJECTED;
+        return this.invitationRepository.save(invitation);
+    }
+
     async sendInvitationEmail(invitation: DoctorInvitation): Promise<void> {
         await this.mailService.sendDoctorInvitationEmail({
             toEmail: invitation.email,

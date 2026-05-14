@@ -1,5 +1,6 @@
 export interface DoctorInvitationTemplateData {
-    invitationLink: string;
+  acceptLink: string;
+  rejectLink: string;
     expiresAt: Date;
 }
 
@@ -8,14 +9,18 @@ export function buildDoctorInvitationTemplate(
 ): { html: string; text: string } {
     const formattedExpiresAt = formatExpirationDate(data.expiresAt);
     const safeExpiresAt = escapeHtml(formattedExpiresAt);
-    const safeLink = escapeHtml(data.invitationLink);
+    const safeAcceptLink = escapeHtml(data.acceptLink);
+    const safeRejectLink = escapeHtml(data.rejectLink);
 
     const text = [
         'Hello,',
         '',
         'You were invited by Clinic Admin to join Clinic System as a Doctor.',
-        'Complete your registration using the link below:',
-        data.invitationLink,
+        'Accept your invitation using the link below:',
+        data.acceptLink,
+        '',
+        'If you want to decline this invitation, use the reject link:',
+        data.rejectLink,
         '',
         `This invitation expires on ${formattedExpiresAt}.`,
         'If you did not expect this email, you can safely ignore it.',
@@ -41,18 +46,33 @@ export function buildDoctorInvitationTemplate(
                   You were invited by Clinic Admin to join Clinic System as a Doctor.
                 </p>
                 <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6;">
-                  Click the button below to complete your registration.
+                  Choose an option below.
                 </p>
-                <p style="margin: 0 0 28px 0;">
-                  <a href="${safeLink}" style="display: inline-block; padding: 12px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 600;">
-                    Complete registration
-                  </a>
+                <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 0 28px 0;">
+                  <tr>
+                    <td style="padding-right: 12px;">
+                      <a href="${safeAcceptLink}" style="display: inline-block; padding: 12px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 600;">
+                        Accept invitation
+                      </a>
+                    </td>
+                    <td>
+                      <a href="${safeRejectLink}" style="display: inline-block; padding: 12px 22px; background-color: #fee2e2; color: #991b1b; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 600; border: 1px solid #fecaca;">
+                        Reject invitation
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin: 0 0 12px 0; font-size: 14px; line-height: 1.6; color: #475569;">
+                  Accept invitation link:
+                </p>
+                <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6;">
+                  <a href="${safeAcceptLink}" style="color: #2563eb;">${safeAcceptLink}</a>
                 </p>
                 <p style="margin: 0 0 12px 0; font-size: 14px; line-height: 1.6; color: #475569;">
-                  Or copy and paste this link into your browser:
+                  Reject invitation link:
                 </p>
                 <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6;">
-                  <a href="${safeLink}" style="color: #2563eb;">${safeLink}</a>
+                  <a href="${safeRejectLink}" style="color: #991b1b;">${safeRejectLink}</a>
                 </p>
                 <p style="margin: 0 0 12px 0; font-size: 14px; line-height: 1.6; color: #475569;">
                   This invitation expires on <strong>${safeExpiresAt}</strong>.

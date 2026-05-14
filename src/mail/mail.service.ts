@@ -15,6 +15,7 @@ export class MailService {
     private readonly transporter: nodemailer.Transporter | null;
     private readonly mailFrom?: string;
     private readonly frontendUrl?: string;
+    private readonly backendUrl?: string;
 
     constructor(private readonly configService: ConfigService) {
         const host = this.configService.get<string>('MAIL_HOST');
@@ -25,6 +26,7 @@ export class MailService {
 
         this.mailFrom = this.configService.get<string>('MAIL_FROM');
         this.frontendUrl = this.configService.get<string>('FRONTEND_URL');
+        this.backendUrl = this.configService.get<string>('BACKEND_URL');
 
         if (host && port && user && pass) {
             this.transporter = nodemailer.createTransport({
@@ -45,14 +47,17 @@ export class MailService {
     }
 
     async sendDoctorInvitationEmail(data: DoctorInvitationEmailData): Promise<void> {
-        const invitationLink = this.buildInvitationLink(data.token);
-        if (!invitationLink) {
-            this.logger.error('Unable to build doctor invitation link. Email not sent.');
+        const acceptLink = this.buildInvitationAcceptLink(data.token);
+        const rejectLink = this.buildInvitationRejectLink(data.token);
+
+        if (!acceptLink || !rejectLink) {
+            this.logger.error('Unable to build doctor invitation links. Email not sent.');
             return;
         }
 
         const { html, text } = buildDoctorInvitationTemplate({
-            invitationLink,
+            acceptLink,
+            rejectLink,
             expiresAt: data.expiresAt,
         });
 
@@ -100,7 +105,7 @@ export class MailService {
         }
     }
 
-    private buildInvitationLink(token: string): string | null {
+    private buildInvitationAcceptLink(token: string): string | null {
         if (!this.frontendUrl) {
             this.logger.error('FRONTEND_URL is not set.');
             return null;
@@ -108,6 +113,22 @@ export class MailService {
 
         const baseUrl = this.frontendUrl.replace(/\/$/, '');
         return `${baseUrl}/doctor-invite/${token}`;
+    }
+
+    private buildInvitationRejectLink(token: string): string | null {
+        const baseUrl = this.backendUrl?.replace(/\/$/, '')
+            ?? this.frontendUrl?.replace(/\/$/, '');
+
+        if (!baseUrl) {
+            this.logger.error('BACKEND_URL is not set for invitation rejection links.');
+            return null;
+        }
+
+        if (!this.backendUrl) {
+            this.logger.warn('BACKEND_URL is not set. Falling back to FRONTEND_URL for rejection links.');
+        }
+
+        return `${baseUrl}/auth/doctor-invite/${token}/reject`;
     }
 
     private toNumber(value: string | undefined): number | undefined {

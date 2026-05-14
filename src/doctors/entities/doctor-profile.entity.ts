@@ -8,7 +8,6 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne } fro
 import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
 import { Queue } from '../../queues/entities/queue.entity';
 import { Rating } from '../../ratings/entities/rating.entity';
-import { AdminProfile } from '../../admins/entities/admin-profile.entity';
 
 @Entity({ name: 'doctor_profiles' })
 export class DoctorProfile extends BaseEntity {
@@ -55,7 +54,6 @@ export class DoctorProfile extends BaseEntity {
 
     /*@Expose({ name: 'average_rating' })
     averageRating?: string;
-  
     @Expose({ name: 'reviews_count' })
     reviewsCount?: number;*/
 
@@ -65,11 +63,6 @@ export class DoctorProfile extends BaseEntity {
     @JoinColumn({ name: 'userId' })
     user!: User;
 
-    @ManyToOne(() => AdminProfile, (admin) => admin.invitedDoctors, {
-        onDelete: 'SET NULL',
-    })
-    @JoinColumn({ name: 'invited_by_admin_id' })
-    invitedByAdmin?: AdminProfile | null;
 
     @OneToMany(() => DoctorClinic, (assignment) => assignment.doctor)
     clinicAssignments!: DoctorClinic[];

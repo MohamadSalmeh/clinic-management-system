@@ -11,6 +11,8 @@ import {
 import { MedicalProfileLog } from '../../medical-profile-logs/entities/medical-profile-log.entity';
 import { PregnancyStatus } from '../enums/pregnancy-status.enum';
 import { MedicalHistory } from '../../medical-histories/entities/medical-history.entity';
+import { PrescribedMedicine } from '../../prescribed-medicines/entities/prescribed-medicine.entity';
+import { MedicalAttachment } from '../../medical-attachments/entities/medical-attachment.entity';
 
 @Entity({ name: 'medical_profiles' })
 export class MedicalProfile extends BaseEntity {
@@ -67,4 +69,10 @@ export class MedicalProfile extends BaseEntity {
 
   @OneToMany(() => MedicalHistory, (history) => history.medicalProfile)
   medicalHistories!: MedicalHistory[];
+
+  @OneToMany(() => PrescribedMedicine, (medicine) => medicine.medicalProfile)
+  prescribedMedicines!: PrescribedMedicine[];
+
+  @OneToMany(() => MedicalAttachment, (attachment) => attachment.medicalProfile)
+  attachments!: MedicalAttachment[];
 }

@@ -13,6 +13,7 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { MedicalAttachment } from '../../medical-attachments/entities/medical-attachment.entity';
 import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
 import { PrescribedMedicine } from '../../prescribed-medicines/entities/prescribed-medicine.entity';
+import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
 
 @Entity({ name: 'medical_histories' })
 export class MedicalHistory extends BaseEntity {
@@ -23,6 +24,10 @@ export class MedicalHistory extends BaseEntity {
     @Index()
     @Column({ name: 'appointment_id', type: 'bigint', unique: true })
     appointmentId!: number;
+
+    @Index()
+    @Column({ name: 'doctor_profile_id', type: 'bigint' })
+    doctorProfileId!: number;
 
     @Column({ type: 'text' })
     diagnosis!: string;
@@ -59,6 +64,10 @@ export class MedicalHistory extends BaseEntity {
     @OneToOne(() => Appointment, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'appointment_id' })
     appointment!: Appointment;
+
+    @ManyToOne(() => DoctorProfile, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'doctor_profile_id' })
+    doctorProfile!: DoctorProfile;
 
     @OneToMany(() => MedicalAttachment, (attachment) => attachment.medicalHistory)
     attachments!: MedicalAttachment[];

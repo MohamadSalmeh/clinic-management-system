@@ -18,6 +18,8 @@ import { UserStatus } from '../enums/user-status.enum';
 import { MedicalProfileLog } from '../../medical-profile-logs/entities/medical-profile-log.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { Wallet } from '../../wallets/entities/wallet.entity';
+import { Payment } from '../../payments/entities/payment.entity';
+import { Transaction } from '../../transactions/entities/transaction.entity';
 
 @Entity({ name: 'users' })
 export class User extends BaseEntity {
@@ -156,6 +158,15 @@ export class User extends BaseEntity {
 
 	@OneToMany(() => Notification, (notification) => notification.user)
 	notifications!: Notification[];
+
+	@OneToMany(() => Payment, (payment) => payment.user)
+	payments!: Payment[];
+
+	@OneToMany(() => Transaction, (transaction) => transaction.user)
+	transactions!: Transaction[];
+
+	@OneToMany(() => MedicalProfileLog, (log) => log.user)
+	medicalProfileLogs!: MedicalProfileLog[];
 
 	@OneToOne(
 		() => Wallet,

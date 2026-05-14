@@ -66,6 +66,4 @@ export class DoctorSchedule extends BaseEntity {
   @JoinColumn({ name: 'clinic_id' })
   clinic!: Clinic;
 
-  @OneToMany(() => Appointment, (appointment) => appointment.scheduling)
-  appointments!: Appointment[];
 }

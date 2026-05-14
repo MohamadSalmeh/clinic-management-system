@@ -4,6 +4,7 @@ import { MaritalStatus } from '../../users/enums/marital-status.enum';
 import { User } from '../../users/entities/user.entity';
 import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
 import { Rating } from '../../ratings/entities/rating.entity';
+import { Referral } from '../../referrals/entities/referral.entity';
 import { Column, Entity, Index, JoinColumn, OneToMany, OneToOne } from 'typeorm';
 
 @Entity({ name: 'patient_profiles' })
@@ -12,13 +13,13 @@ export class PatientProfile extends BaseEntity {
   @Column({ type: 'bigint', unique: true })
   userId!: number;
 
-  @Column({ name: 'marital_status', type: 'enum', enum: MaritalStatus })
+  @Column({ name: 'marital_status', type: 'enum', enum: MaritalStatus,default: MaritalStatus.SINGLE })
   maritalStatus!: MaritalStatus;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ type: 'varchar', length: 100,nullable: true })
   occupation!: string;
 
-  @Column({ name: 'emergency_contact_name', type: 'varchar', length: 255 })
+  @Column({ name: 'emergency_contact_name', type: 'varchar', length: 255 ,nullable: true})
   emergencyContactName!: string;
 
   @Column({ name: 'emergency_contact_phone', type: 'varchar', length: 20 })
@@ -38,4 +39,7 @@ export class PatientProfile extends BaseEntity {
 
   @OneToMany(() => Appointment, (appointment) => appointment.patient)
   appointments!: Appointment[];
+
+  @OneToMany(() => Referral, (referral) => referral.patient)
+  referrals!: Referral[];
 }

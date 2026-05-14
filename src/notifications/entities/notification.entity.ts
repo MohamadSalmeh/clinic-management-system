@@ -1,19 +1,16 @@
 import {
   Column,
-  CreateDateColumn,
   Entity,
   Index,
   JoinColumn,
   ManyToOne,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { NotificationPriority } from '../enums/notification-priority.enum';
 import { NotificationStatus } from '../enums/notification-status.enum';
 import { NotificationType } from '../enums/notification-type.enum';
+import { NotificationTargetType } from '../enums/notification-target-type.enum';
 import {BaseEntity} from "../../common/entities/base.entity";
-import { Appointment } from '../../appointments/entities/appointment.entity';
 
 @Entity({ name: 'notifications' })
 export class Notification extends BaseEntity {
@@ -39,12 +36,17 @@ export class Notification extends BaseEntity {
   })
   status!: NotificationStatus;
 
-  @Column({ name: 'related_entity_type', type: 'varchar', length: 50, nullable: true })
-  relatedEntityType!: string | null;
+  @Column({
+    name: 'target_type',
+    type: 'enum',
+    enum: NotificationTargetType,
+    nullable: true,
+  })
+  targetType!: NotificationTargetType | null;
 
   @Index()
-  @Column({ name: 'related_entity_id', type: 'bigint', nullable: true })
-  relatedEntityId!: number | null;
+  @Column({ name: 'target_id', type: 'bigint', nullable: true })
+  targetId!: number | null;
 
   @Column({ name: 'sent_at', type: 'timestamp', nullable: true })
   sentAt!: Date | null;
@@ -65,9 +67,4 @@ export class Notification extends BaseEntity {
   @ManyToOne(() => User, (user) => user.notifications, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user!: User;
-
-  @Index()
-  @ManyToOne(() => Appointment, (appointment) => appointment.notifications, { onDelete: 'CASCADE', nullable: true })
-  @JoinColumn({ name: 'appointment_id' })
-  appointment!: Appointment | null;
 }

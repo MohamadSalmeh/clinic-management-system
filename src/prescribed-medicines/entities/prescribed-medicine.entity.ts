@@ -6,18 +6,17 @@ import {
   ManyToOne,
 } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
-import { PatientProfile } from '../../patients/entities/patient-profile.entity';
 import { MedicineStatus } from '../enums/medicine-status.enum';
-import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
-import { Appointment } from '../../appointments/entities/appointment.entity';
 import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
 import { MedicalHistory } from '../../medical-histories/entities/medical-history.entity';
+import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
+import { User } from '../../users/entities/user.entity';
 
 @Entity({ name: 'prescribed_medicines' })
 export class PrescribedMedicine extends BaseEntity {
   @Index()
-  @Column({ name: 'patient_profile_id', type: 'bigint' })
-  patientProfileId!: number;
+  @Column({ name: 'medical_profile_id', type: 'bigint' })
+  medicalProfileId!: number;
 
   @Index()
   @Column({ 
@@ -26,6 +25,10 @@ export class PrescribedMedicine extends BaseEntity {
     transformer: new ColumnNumericTransformer() 
   })
   medicalHistoryId!: number;
+
+  @Index()
+  @Column({ name: 'user_id', type: 'bigint' })
+  userId!: number;
 
   @Column({ name: 'medicine_name', type: 'varchar' })
   medicineName!: string;
@@ -52,12 +55,16 @@ export class PrescribedMedicine extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
 
-  @ManyToOne(() => PatientProfile, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'patient_profile_id' })
-  patientProfile!: PatientProfile;
+  @ManyToOne(() => MedicalProfile, (medicalProfile) => medicalProfile.prescribedMedicines, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'medical_profile_id' })
+  medicalProfile!: MedicalProfile;
 
   @ManyToOne(() => MedicalHistory, (history) => history.medicines, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'medical_history_id' })
   medicalHistory!: MedicalHistory;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user!: User;
 
 }

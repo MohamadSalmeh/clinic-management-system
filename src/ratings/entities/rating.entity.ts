@@ -21,8 +21,8 @@ export class Rating extends BaseEntity {
   doctorProfileId!: number;
 
   @Index()
-  @Column({ name: 'appointment_id', type: 'bigint' })
-  appointmentId!: number;
+  @Column({ name: 'appointment_id', type: 'bigint', nullable: true })
+  appointmentId!: number | null;
 
   @Column({ type: 'smallint' ,nullable: true })
   score!: number|null;
@@ -49,9 +49,9 @@ export class Rating extends BaseEntity {
     return this.score !== null && this.score >= 4;
   }
 
-  @OneToOne(() => Appointment, (appointment) => appointment.rating)
+  @OneToOne(() => Appointment, (appointment) => appointment.rating, { nullable: true })
   @JoinColumn({ name: 'appointment_id' })
-  appointment!: Appointment;
+  appointment!: Appointment | null;
 
   @ManyToOne(() => PatientProfile, (patient) => patient.ratings)
   @JoinColumn({ name: 'patient_profile_id' }) 

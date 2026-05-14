@@ -20,8 +20,8 @@ export class MedicalProfileLog extends BaseEntity {
   medicalProfileId!: number;
 
   @Index()
-  @Column({ name: 'changed_by_id', type: 'bigint' })
-  changedById!: number;
+  @Column({ name: 'user_id', type: 'bigint' })
+  userId!: number;
 
   @Column({ name: 'change_reason', type: 'text', nullable: true })
   changeReason!: string | null;
@@ -35,9 +35,9 @@ export class MedicalProfileLog extends BaseEntity {
   @Column({ name: 'new_value', type: 'jsonb', nullable: true })
   newValue!: any;
 
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'changed_by_id' })
-  changedBy!: User;
+  @ManyToOne(() => User, (user) => user.medicalProfileLogs)
+  @JoinColumn({ name: 'user_id' })
+  user!: User;
 
   @ManyToOne(() => MedicalProfile, (medicalProfile) => medicalProfile.logs, {
     onDelete: 'CASCADE',
@@ -46,7 +46,11 @@ export class MedicalProfileLog extends BaseEntity {
   medicalProfile!: MedicalProfile;
 
   @Index()
-  @ManyToOne(() => Appointment, (appointment) => appointment.medicalHistory, {
+  @Column({ name: 'appointment_id', type: 'bigint', nullable: true })
+  appointmentId!: number | null;
+
+  @Index()
+  @ManyToOne(() => Appointment, (appointment) => appointment.medicalProfileLogs, {
     onDelete: 'SET NULL',
     nullable: true,
   })

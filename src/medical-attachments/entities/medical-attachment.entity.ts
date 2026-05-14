@@ -7,14 +7,24 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { MedicalHistory } from '../../medical-histories/entities/medical-history.entity';
+import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
+import { User } from '../../users/entities/user.entity';
 import { BaseEntity } from '../../common/entities/base.entity'; 
 
 @Entity({ name: 'medical_attachments' })
 export class MedicalAttachment extends BaseEntity {
 
   @Index()
-  @Column({ name: 'medical_history_id', type: 'bigint' })
-  medicalHistoryId!: number;
+  @Column({ name: 'medical_history_id', type: 'bigint', nullable: true })
+  medicalHistoryId!: number | null;
+
+  @Index()
+  @Column({ name: 'medical_profile_id', type: 'bigint', nullable: true })
+  medicalProfileId!: number | null;
+
+  @Index()
+  @Column({ name: 'user_id', type: 'bigint' })
+  userId!: number;
 
   @Column({ name: 'file_path', type: 'text' })
   filePath!: string;
@@ -27,7 +37,19 @@ export class MedicalAttachment extends BaseEntity {
 
   @ManyToOne(() => MedicalHistory, (medicalHistory) => medicalHistory.attachments, {
     onDelete: 'CASCADE',
+    nullable: true,
   })
   @JoinColumn({ name: 'medical_history_id' })
-  medicalHistory!: MedicalHistory;
+  medicalHistory!: MedicalHistory | null;
+
+  @ManyToOne(() => MedicalProfile, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'medical_profile_id' })
+  medicalProfile!: MedicalProfile | null;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user!: User;
 }

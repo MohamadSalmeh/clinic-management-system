@@ -196,6 +196,11 @@ export class AuthService {
     return this.buildAuthResponse(user);
   }
 
+  async rejectDoctorInviteToken(token: string): Promise<{ message: string }> {
+    await this.doctorInvitationsService.rejectInvitationByToken(token);
+    return { message: 'Invitation rejected' };
+  }
+
   private async registerDoctorFromGoogleInvite(
     token: string,
     googleData: GoogleUserData,

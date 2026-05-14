@@ -1,9 +1,7 @@
 import { BaseEntity } from '../../common/entities/base.entity';
 import { Clinic } from '../../clinics/entities/clinic.entity';
-import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
 import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
 import { PatientProfile } from '../../patients/entities/patient-profile.entity';
-import { Notification } from '../../notifications/entities/notification.entity';
 import { MedicalProfileLog } from '../../medical-profile-logs/entities/medical-profile-log.entity';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Rating } from '../../ratings/entities/rating.entity';
@@ -26,10 +24,6 @@ export class Appointment extends BaseEntity {
   @Index()
   @Column({ name: 'clinic_id', type: 'bigint' })
   clinicId!: number;
-
-  @Index()
-  @Column({ name: 'scheduling_id', type: 'bigint' })
-  schedulingId!: number;
 
   @Column({ type: 'varchar', length: 100 })
   type!: string;
@@ -98,27 +92,21 @@ export class Appointment extends BaseEntity {
   @JoinColumn({ name: 'clinic_id' })
   clinic!: Clinic;
 
-  @ManyToOne(() => DoctorSchedule, (schedule) => schedule.appointments, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'scheduling_id' })
-  scheduling!: DoctorSchedule;
-
-  @OneToMany(() => Notification, (notification) => notification.appointment)
-  notifications!: Notification[];
-
   @OneToMany(() => MedicalHistory, (history) => history.appointment)
   medicalHistory!: MedicalHistory[];
 
+  @OneToMany(() => MedicalProfileLog, (log) => log.appointment)
+  medicalProfileLogs!: MedicalProfileLog[];
+
   @OneToOne(() => Payment, (payment) => payment.appointment)
-  payment!: Payment;
+  payment!: Payment | null;
 
   @OneToOne(() => Rating, (rating) => rating.appointment)
-  rating!: Rating;
+  rating!: Rating | null;
 
   @OneToOne(() => Queue, (queue) => queue.appointment)
   queue!: Queue;
 
   @OneToOne(() => Referral, (referral) => referral.appointment)
-  referral!: Referral;
+  referral!: Referral | null;
 }
