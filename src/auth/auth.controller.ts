@@ -20,8 +20,8 @@ import {
   CURRENT_USER_KEY,
   UserRole,
 } from '../utils';
-import { DoctorInviteRegisterDto, LoginDto, RegisterDto } from './dto';
-import { AuthOptionalGuard, AuthRolesGuard, GoogleAuthGuard } from './guards';
+import { DoctorInviteRegisterDto, LoginDto, RegisterDto, VerifyAccountDto } from './dto';
+import { AuthRolesGuard, GoogleAuthGuard } from './guards';
 import { AuthService } from './auth.service';
 import { User } from '../users/entities/user.entity';
 import { GoogleUserData } from './strategies';
@@ -52,9 +52,70 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(200)
-  @UseGuards(AuthOptionalGuard)
-  logout(): { message: string } {
-    return this.authService.logout();
+  @UseGuards(AuthRolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  async logout(
+    @CurrentUser() currentUser: ActiveUserData | undefined,
+  ): Promise<{ message: string }> {
+    if (!currentUser) {
+      throw new UnauthorizedException('Authenticated user is missing in request');
+    }
+
+    return this.authService.logout(Number(currentUser.sub));
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  async refresh(
+    @Body('refreshToken') refreshToken: string,
+  ): Promise<{ accessToken: string }> {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token is required');
+    }
+
+    return this.authService.refreshToken(refreshToken);
+  }
+
+  @Post('verify-account')
+  @HttpCode(200)
+  @UseGuards(AuthRolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  async verifyAccount(
+    @CurrentUser() currentUser: ActiveUserData | undefined,
+    @Body() dto: VerifyAccountDto,
+  ): Promise<{ message: string }> {
+    if (!currentUser) {
+      throw new UnauthorizedException('Authenticated user is missing in request');
+    }
+
+    return this.authService.verifyAccount(Number(currentUser.sub), dto.code);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(200)
+  @UseGuards(AuthRolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  async resendVerification(
+    @CurrentUser() currentUser: ActiveUserData | undefined,
+  ): Promise<{ message: string }> {
+    if (!currentUser) {
+      throw new UnauthorizedException('Authenticated user is missing in request');
+    }
+
+    return this.authService.resendVerification(Number(currentUser.sub));
+  }
+
+  @Get('status')
+  @UseGuards(AuthRolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  async getStatus(
+    @CurrentUser() currentUser: ActiveUserData | undefined,
+  ): Promise<{ isVerified: boolean; isProfileCompleted: boolean; role: UserRole }> {
+    if (!currentUser) {
+      throw new UnauthorizedException('Authenticated user is missing in request');
+    }
+
+    return this.authService.getAccountStatus(Number(currentUser.sub));
   }
 
   @Get('google')

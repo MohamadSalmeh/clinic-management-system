@@ -8,9 +8,12 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Request } from 'express';
+import { Repository } from 'typeorm';
 import { ROLES_KEY } from '../../common/decorators';
 import { ActiveUserData, CURRENT_USER_KEY, UserRole } from '../../utils';
+import { User } from '../../users/entities/user.entity';
 
 type RequestWithUser = Request & {
   [CURRENT_USER_KEY]?: ActiveUserData;
@@ -22,6 +25,8 @@ export class AuthRolesGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -46,6 +51,20 @@ export class AuthRolesGuard implements CanActivate {
     }
 
     const payload = await this.verifyToken(token, jwtSecret);
+
+    const user = await this.userRepository.findOne({
+      where: { id: Number(payload.sub) },
+      select: ['id', 'tokenVersion'],
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (payload.version < user.tokenVersion) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+
     request[CURRENT_USER_KEY] = payload;
 
     if (requiredRoles.length === 0) {
@@ -71,7 +90,12 @@ export class AuthRolesGuard implements CanActivate {
         secret,
       });
 
-      if (!payload?.sub || !payload?.email || !payload?.usertype) {
+      if (
+        !payload?.sub ||
+        !payload?.email ||
+        !payload?.usertype ||
+        typeof payload.version !== 'number'
+      ) {
         throw new UnauthorizedException('Invalid token payload');
       }
 
