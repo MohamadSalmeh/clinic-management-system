@@ -8,17 +8,20 @@ import { PassportModule } from '@nestjs/passport';
 import { getJwtConfig } from './config';
 import { UsersModule } from '../users/users.module';
 import { AdminsModule } from '../admins/admins.module';
+import { PatientsModule } from '../patients/patients.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthOptionalGuard, AuthRolesGuard, GoogleAuthGuard } from './guards';
 import { AuthHelperProvider } from './providers';
 import { GoogleStrategy } from './strategies';
+import { OtpService } from './services/otp.service';
 
 @Module({
   imports: [
     AdminsModule,
     DoctorsModule,
     DoctorInvitationsModule,
+    forwardRef(() => PatientsModule),
     forwardRef(() => UsersModule),
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
@@ -30,11 +33,12 @@ import { GoogleStrategy } from './strategies';
   providers: [
     AuthService,
     AuthHelperProvider,
+    OtpService,
     AuthRolesGuard,
     AuthOptionalGuard,
     GoogleAuthGuard,
     GoogleStrategy,
   ],
-  exports: [JwtModule,AuthService],
+  exports: [JwtModule, AuthService, OtpService],
 })
 export class AuthModule {}

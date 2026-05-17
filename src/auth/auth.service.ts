@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -22,6 +24,15 @@ import { DoctorInvitationStatus } from '../doctor-invitations/enums/doctor-invit
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { AdminsService } from '../admins/admins.service';
 import { UserStatus } from '../users/enums/user-status.enum';
+import { PatientsService } from '../patients/patients.service';
+import { OtpService } from './services/otp.service';
+
+type RefreshTokenPayload = Pick<JWTPayloadType, 'sub' | 'version'>;
+type AccountStatus = {
+  isVerified: boolean;
+  isProfileCompleted: boolean;
+  role: UserRole;
+};
 
 @Injectable()
 export class AuthService {
@@ -34,6 +45,9 @@ export class AuthService {
     private readonly authHelperProvider: AuthHelperProvider,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => PatientsService))
+    private readonly patientsService: PatientsService,
+    private readonly otpService: OtpService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<User> {
@@ -51,6 +65,8 @@ export class AuthService {
       registerDto.password,
     );
 
+    const { code, expiresAt } = await this.generateVerificationCode();
+
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
@@ -65,9 +81,14 @@ export class AuthService {
       preferredLanguage: registerDto.preferredLanguage,
       themeMode: registerDto.themeMode,
       role: UserRole.PATIENT,
+      isVerified: false,
+      verificationCode: code,
+      verificationCodeExpiresAt: expiresAt,
     });
 
     const savedUser = await this.userRepository.save(user);
+
+    await this.otpService.sendOtpEmail(savedUser.email, code);
 
     if (savedUser.role === UserRole.ADMIN) {
       await this.adminsService.createAdminProfile(savedUser.id);
@@ -84,9 +105,131 @@ export class AuthService {
     return this.buildAuthResponse(user);
   }
 
-  logout(): { message: string } {
-    // Centralized entry point for future refresh-token invalidation.
+  async refreshToken(token: string): Promise<{ accessToken: string }> {
+    if (!token) {
+      throw new UnauthorizedException('Refresh token is required');
+    }
+
+    const secret = this.getJwtSecret();
+
+    let payload: RefreshTokenPayload;
+
+    try {
+      payload = await this.jwtService.verifyAsync<RefreshTokenPayload>(token, {
+        secret,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (!payload?.sub || typeof payload.version !== 'number') {
+      throw new UnauthorizedException('Invalid refresh token payload');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: Number(payload.sub) },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (payload.version !== user.tokenVersion) {
+      throw new UnauthorizedException('Refresh token has been revoked');
+    }
+
+    const accessPayload = this.buildJwtPayload(user);
+    const accessToken = await this.generateAccessToken(accessPayload);
+
+    return { accessToken };
+  }
+
+  async logout(userId: number): Promise<{ message: string }> {
+    const result = await this.userRepository.increment(
+      { id: userId },
+      'tokenVersion',
+      1,
+    );
+
+    if (!result.affected) {
+      throw new NotFoundException('User not found');
+    }
+
     return { message: 'Logged out successfully' };
+  }
+
+  async verifyAccount(userId: number, code: string): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.verificationCode || !user.verificationCodeExpiresAt) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    const expiresAt = new Date(user.verificationCodeExpiresAt);
+
+    if (user.verificationCode !== code || expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    user.isVerified = true;
+    user.verificationCode = null;
+    user.verificationCodeExpiresAt = null;
+
+    await this.userRepository.save(user);
+
+    return { message: 'Account verified successfully' };
+  }
+
+  async resendVerification(userId: number): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const { code, expiresAt } = await this.generateVerificationCode();
+
+    user.verificationCode = code;
+    user.verificationCodeExpiresAt = expiresAt;
+
+    await this.userRepository.save(user);
+
+    await this.otpService.sendOtpEmail(user.email, code);
+
+    return { message: 'Verification code sent' };
+  }
+
+  async getAccountStatus(userId: number): Promise<AccountStatus> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    let isProfileCompleted = this.isProfileCompleted(user);
+
+    if (user.role === UserRole.PATIENT) {
+      try {
+        const completion = await this.patientsService.getProfileCompletion(userId);
+        isProfileCompleted = completion.isComplete;
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          isProfileCompleted = false;
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    return {
+      isVerified: user.isVerified,
+      isProfileCompleted,
+      role: user.role,
+    };
   }
 
   async validateGoogleUser(
@@ -341,8 +484,13 @@ export class AuthService {
 
 
   private async buildAuthResponse(user: User): Promise<AuthResponse> {
-    const payload: JWTPayloadType = this.buildJwtPayload(user);
-    const accessToken = await this.authHelperProvider.generateJWT(payload);
+    const accessPayload = this.buildJwtPayload(user);
+    const refreshPayload = this.buildRefreshTokenPayload(user);
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.generateAccessToken(accessPayload),
+      this.generateRefreshToken(refreshPayload),
+    ]);
 
     const decodedToken = this.jwtService.decode(accessToken) as
       | Partial<JWTPayloadType>
@@ -356,6 +504,7 @@ export class AuthService {
 
     return {
       accessToken,
+      refreshToken,
       user: {
         id: Number(user.id),
         email: user.email,
@@ -366,16 +515,53 @@ export class AuthService {
     };
   }
 
-    private buildJwtPayload(user: User): JWTPayloadType {
-    const versionRaw = this.configService.get<string>('JWT_VERSION');
-    const version = versionRaw && /^\d+$/.test(versionRaw) ? Number(versionRaw) : 1;
-
+  private buildJwtPayload(user: User): JWTPayloadType {
     return {
       sub: Number(user.id),
       email: user.email,
       usertype: user.role.toUpperCase() as JWTPayloadType['usertype'],
-      version,
+      version: user.tokenVersion,
     };
+  }
+
+  private buildRefreshTokenPayload(user: User): RefreshTokenPayload {
+    return {
+      sub: Number(user.id),
+      version: user.tokenVersion,
+    };
+  }
+
+  private getJwtSecret(): string {
+    const secret = this.configService.get<string>('JWT_SECRET');
+
+    if (!secret) {
+      throw new UnauthorizedException('Invalid token configuration');
+    }
+
+    return secret;
+  }
+
+  private async generateAccessToken(payload: JWTPayloadType): Promise<string> {
+    return this.jwtService.signAsync(payload, {
+      secret: this.getJwtSecret(),
+      expiresIn: '15m',
+    });
+  }
+
+  private async generateRefreshToken(
+    payload: RefreshTokenPayload,
+  ): Promise<string> {
+    return this.jwtService.signAsync(payload, {
+      secret: this.getJwtSecret(),
+      expiresIn: '7d',
+    });
+  }
+
+  private async generateVerificationCode(): Promise<{ code: string; expiresAt: Date }> {
+    const code = await this.otpService.generateOtp(6);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    return { code, expiresAt };
   }
 
   private isProfileCompleted(user: User): boolean {

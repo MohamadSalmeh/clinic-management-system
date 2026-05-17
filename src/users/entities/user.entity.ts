@@ -76,6 +76,12 @@ export class User extends BaseEntity {
 	@Column({ name: 'is_verified', type: 'boolean', default: false })
 	isVerified!: boolean;
 
+	@Column({ name: 'verification_code', type: 'varchar', length: 6, nullable: true })
+	verificationCode!: string | null;
+
+	@Column({ name: 'verification_code_expires_at', type: 'timestamp', nullable: true })
+	verificationCodeExpiresAt!: Date | null;
+
 	@Column({
 		type: 'enum',
 		enum: UserRole,
@@ -89,6 +95,9 @@ export class User extends BaseEntity {
 		default: UserStatus.ACTIVE,
 	})
 	status!: UserStatus;
+
+	@Column({ name: 'token_version', type: 'int', default: 1 })
+	tokenVersion!: number;
 
 	@Expose({ name: 'full_name' })
 	get fullName(): string {

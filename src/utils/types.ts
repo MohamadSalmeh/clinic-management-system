@@ -14,6 +14,7 @@ export type ActiveUserData = JWTPayloadType & {
 
 export type AuthResponse = {
   accessToken: string;
+  refreshToken: string;
   user: {
     id: number;
     email: string;
