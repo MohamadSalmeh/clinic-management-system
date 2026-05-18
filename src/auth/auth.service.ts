@@ -58,7 +58,48 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+      if (existingUser.isVerified) {
+        throw new ConflictException('User with this email already exists');
+      }
+
+      const hashedPassword = await this.authHelperProvider.hashPassword(
+        registerDto.password,
+      );
+
+      const { code, expiresAt } = await this.generateVerificationCode();
+
+      existingUser.password = hashedPassword;
+      existingUser.phone = registerDto.phone;
+      existingUser.firstName = registerDto.firstName;
+      existingUser.fatherName = registerDto.fatherName;
+      existingUser.lastName = registerDto.lastName;
+      existingUser.birthDate = new Date(registerDto.birthDate);
+      existingUser.gender = registerDto.gender;
+      existingUser.address = registerDto.address;
+      existingUser.avatarUrl = registerDto.avatarUrl ?? null;
+      if (registerDto.preferredLanguage !== undefined) {
+        existingUser.preferredLanguage = registerDto.preferredLanguage;
+      }
+
+      if (registerDto.themeMode !== undefined) {
+        existingUser.themeMode = registerDto.themeMode;
+      }
+      existingUser.role = UserRole.PATIENT;
+      existingUser.isVerified = false;
+      existingUser.verificationCode = code;
+      existingUser.verificationCodeExpiresAt = expiresAt;
+
+      const updatedUser = await this.userRepository.save(existingUser);
+
+      if (!updatedUser.phone) {
+        throw new BadRequestException('User phone number is missing');
+      }
+
+      await this.otpService.sendOtpWhatsApp(updatedUser.phone, code);
+
+      return this.userRepository.findOneOrFail({
+        where: { id: updatedUser.id },
+      });
     }
 
     const hashedPassword = await this.authHelperProvider.hashPassword(
@@ -88,7 +129,11 @@ export class AuthService {
 
     const savedUser = await this.userRepository.save(user);
 
-    await this.otpService.sendOtpEmail(savedUser.email, code);
+    if (!savedUser.phone) {
+      throw new BadRequestException('User phone number is missing');
+    }
+
+    await this.otpService.sendOtpWhatsApp(savedUser.phone, code);
 
     if (savedUser.role === UserRole.ADMIN) {
       await this.adminsService.createAdminProfile(savedUser.id);
@@ -198,7 +243,11 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
-    await this.otpService.sendOtpEmail(user.email, code);
+    if (!user.phone) {
+      throw new BadRequestException('User phone number is missing');
+    }
+
+    await this.otpService.sendOtpWhatsApp(user.phone, code);
 
     return { message: 'Verification code sent' };
   }

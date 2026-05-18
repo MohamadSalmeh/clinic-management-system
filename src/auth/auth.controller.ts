@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Public, Roles } from '../common/decorators';
 import {
   ActiveUserData,
   AuthResponse,
@@ -78,19 +78,15 @@ export class AuthController {
 
   @Post('verify-account')
   @HttpCode(200)
-  @UseGuards(AuthRolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  @Public()
   async verifyAccount(
-    @CurrentUser() currentUser: ActiveUserData | undefined,
-    @Body() dto: VerifyAccountDto,
+    @Body('userId') userId: number,
+    @Body('code') code: string,
   ): Promise<{ message: string }> {
-    if (!currentUser) {
-      throw new UnauthorizedException('Authenticated user is missing in request');
-    }
-
-    return this.authService.verifyAccount(Number(currentUser.sub), dto.code);
+    return this.authService.verifyAccount(userId, code);
   }
 
+  
   @Post('resend-verification')
   @HttpCode(200)
   @UseGuards(AuthRolesGuard)
