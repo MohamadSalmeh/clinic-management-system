@@ -20,7 +20,16 @@ import {
   CURRENT_USER_KEY,
   UserRole,
 } from '../utils';
-import { DoctorInviteRegisterDto, LoginDto, RegisterDto, VerifyAccountDto } from './dto';
+import {
+  ChangePasswordDto,
+  DoctorInviteRegisterDto,
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  VerifyAccountDto,
+  VerifyResetCodeDto,
+} from './dto';
 import { AuthRolesGuard, GoogleAuthGuard } from './guards';
 import { AuthService } from './auth.service';
 import { User } from '../users/entities/user.entity';
@@ -76,6 +85,33 @@ export class AuthController {
     return this.authService.refreshToken(refreshToken);
   }
 
+  @Post('forgot-password')
+  @HttpCode(200)
+  @Public()
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('verify-reset-code')
+  @HttpCode(200)
+  @Public()
+  async verifyResetCode(
+    @Body() dto: VerifyResetCodeDto,
+  ): Promise<{ valid: true }> {
+    return this.authService.verifyResetCode(dto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  @Public()
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.authService.resetPassword(dto);
+  }
+
   @Post('verify-account')
   @HttpCode(200)
   @Public()
@@ -84,6 +120,21 @@ export class AuthController {
     @Body('code') code: string,
   ): Promise<{ message: string }> {
     return this.authService.verifyAccount(userId, code);
+  }
+
+  @Post('change-password')
+  @HttpCode(200)
+  @UseGuards(AuthRolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  async changePassword(
+    @CurrentUser() currentUser: ActiveUserData | undefined,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    if (!currentUser) {
+      throw new UnauthorizedException('Authenticated user is missing in request');
+    }
+
+    return this.authService.changePassword(Number(currentUser.sub), dto);
   }
 
   

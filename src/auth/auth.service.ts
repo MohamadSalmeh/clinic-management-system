@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
   forwardRef,
@@ -12,7 +13,15 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
-import { DoctorInviteRegisterDto, LoginDto, RegisterDto } from './dto';
+import {
+  ChangePasswordDto,
+  DoctorInviteRegisterDto,
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  VerifyResetCodeDto,
+} from './dto';
 import { AuthHelperProvider } from './providers';
 import { AuthResponse, JWTPayloadType, UserRole } from '../utils';
 import { PreferredLanguage } from '../users/enums/preferredLanguage.enum';
@@ -36,6 +45,8 @@ type AccountStatus = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -148,6 +159,119 @@ export class AuthService {
     const user = await this.validateUser(loginDto.email, loginDto.password);
 
     return this.buildAuthResponse(user);
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const user = await this.userRepository.findOne({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const { code, expiresAt } = await this.generateVerificationCode();
+
+    user.verificationCode = code;
+    user.verificationCodeExpiresAt = expiresAt;
+
+    const savedUser = await this.userRepository.save(user);
+
+    if (!savedUser.phone) {
+      throw new BadRequestException('User phone number is missing');
+    }
+
+    try {
+      await this.otpService.sendOtpWhatsApp(savedUser.phone, code);
+    } catch (error) {
+      this.logger.error('Failed to send reset OTP', error instanceof Error ? error.stack : undefined);
+      throw error;
+    }
+
+    return { message: 'Reset code sent successfully' };
+  }
+
+  async verifyResetCode(dto: VerifyResetCodeDto): Promise<{ valid: true }> {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const user = await this.userRepository.findOne({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.verificationCode || !user.verificationCodeExpiresAt) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    const expiresAt = new Date(user.verificationCodeExpiresAt);
+
+    if (user.verificationCode !== dto.code || expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    return { valid: true };
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const user = await this.userRepository.findOne({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const hashedPassword = await this.authHelperProvider.hashPassword(
+      dto.newPassword,
+    );
+
+    user.password = hashedPassword;
+    user.verificationCode = null;
+    user.verificationCodeExpiresAt = null;
+    user.tokenVersion = (user.tokenVersion ?? 1) + 1;
+
+    await this.userRepository.save(user);
+
+    return { message: 'Password reset successfully' };
+  }
+
+  async changePassword(
+    userId: number,
+    dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    const userWithPassword = await this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.password')
+      .where('user.id = :id', { id: userId })
+      .getOne();
+
+    if (!userWithPassword || !userWithPassword.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const passwordMatches = await this.authHelperProvider.comparePassword(
+      dto.oldPassword,
+      userWithPassword.password,
+    );
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const hashedPassword = await this.authHelperProvider.hashPassword(
+      dto.newPassword,
+    );
+
+    userWithPassword.password = hashedPassword;
+    userWithPassword.tokenVersion = (userWithPassword.tokenVersion ?? 1) + 1;
+
+    await this.userRepository.save(userWithPassword);
+
+    return { message: 'Password changed successfully' };
   }
 
   async refreshToken(token: string): Promise<{ accessToken: string }> {
