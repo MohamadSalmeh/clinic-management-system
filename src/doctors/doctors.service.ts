@@ -1,14 +1,24 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { UpdateDoctorProfileDto } from './dto';
 import { DoctorProfile } from './entities/doctor-profile.entity';
 import { User } from '../users/entities/user.entity';
+import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
 
 export type DoctorProfileCompletionStatus = {
   isComplete: boolean;
   completionPercentage: number;
   missingFields: string[];
+};
+
+export type DoctorSearchQuery = {
+  mainSpecializationId?: string;
+  specialization?: string;
+  subSpecializationId?: string;
+  subSpecialization?: string;
+  clinicId?: string;
+  search?: string;
 };
 
 @Injectable()
@@ -95,6 +105,77 @@ export class DoctorsService {
     }
   }
 
+  async findMe(
+    userId: number,
+  ): Promise<{ profile: DoctorProfile; completionStatus: DoctorProfileCompletionStatus }> {
+    const profile = await this.doctorProfileRepository.findOne({
+      where: { userId },
+      relations: { user: true },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    return {
+      profile,
+      completionStatus: this.buildCompletionStatus(profile),
+    };
+  }
+
+  async findOne(id: number): Promise<DoctorProfile> {
+    const profile = await this.doctorProfileRepository.findOne({
+      where: { id },
+      relations: { user: true },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    return profile;
+  }
+
+  async findAll(query: DoctorSearchQuery): Promise<DoctorProfile[]> {
+    const qb = this.doctorProfileRepository
+      .createQueryBuilder('doctor')
+      .leftJoinAndSelect('doctor.user', 'user')
+      .where('doctor.status = :status', { status: DoctorProfileStatus.ACTIVE })
+      .andWhere('doctor.isApproved = :isApproved', { isApproved: true });
+
+    const specialization = query.specialization ?? query.mainSpecializationId;
+    if (specialization) {
+      qb.andWhere('doctor.specialization = :specialization', { specialization });
+    }
+
+    const subSpecialization = query.subSpecialization ?? query.subSpecializationId;
+    if (subSpecialization) {
+      qb.andWhere('doctor.subSpecialization = :subSpecialization', { subSpecialization });
+    }
+
+    const clinicId = this.parseOptionalNumber(query.clinicId);
+    if (clinicId !== undefined) {
+      qb.innerJoin('doctor.clinicAssignments', 'clinicAssignment')
+        .andWhere('clinicAssignment.clinicId = :clinicId', { clinicId });
+    }
+
+    if (query.search) {
+      const search = `%${query.search}%`;
+      qb.andWhere(
+        new Brackets((builder) => {
+          builder
+            .where('user.firstName ILike :search', { search })
+            .orWhere('user.lastName ILike :search', { search })
+            .orWhere('user.fatherName ILike :search', { search })
+            .orWhere('doctor.bio ILike :search', { search })
+            .orWhere('doctor.licenseNumber ILike :search', { search });
+        }),
+      );
+    }
+
+    return qb.getMany();
+  }
+
   private buildCompletionStatus(
     doctorProfile: DoctorProfile,
   ): DoctorProfileCompletionStatus {
@@ -128,5 +209,14 @@ export class DoctorsService {
       completionPercentage,
       missingFields,
     };
+  }
+
+  private parseOptionalNumber(value?: string): number | undefined {
+    if (value === undefined || value === '') {
+      return undefined;
+    }
+
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? undefined : parsed;
   }
 }
