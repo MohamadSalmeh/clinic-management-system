@@ -19,7 +19,7 @@ import { OtpService } from './services/otp.service';
 @Module({
   imports: [
     AdminsModule,
-    DoctorsModule,
+    forwardRef(() => DoctorsModule),
     DoctorInvitationsModule,
     forwardRef(() => PatientsModule),
     forwardRef(() => UsersModule),
