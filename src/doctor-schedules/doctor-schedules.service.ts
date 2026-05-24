@@ -200,6 +200,65 @@ export class DoctorSchedulesService {
     return { message: 'Schedule request approved and applied.' };
   }
 
+  async getDoctorOwnSchedule(userId: number): Promise<DoctorSchedule[]> {
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: { userId },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    return this.doctorScheduleRepository.find({
+      where: { doctorProfileId: doctorProfile.id },
+      relations: { clinic: true },
+      order: { dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  async getDoctorScheduleForAdmin(
+    doctorProfileId: number,
+  ): Promise<DoctorSchedule[]> {
+    return this.doctorScheduleRepository.find({
+      where: { doctorProfileId },
+      relations: { clinic: true },
+      order: { dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  async getPendingScheduleRequestsForAdmin(): Promise<DoctorScheduleRequest[]> {
+    return this.doctorScheduleRequestRepository.find({
+      where: { status: DoctorScheduleRequestStatus.PENDING },
+      relations: { doctorProfile: { user: true }, clinic: true },
+      order: { dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  async getDoctorScheduleForPatient(
+    doctorProfileId: number,
+    clinicId: number,
+  ): Promise<DoctorSchedule[]> {
+    return this.doctorScheduleRepository.find({
+      where: {
+        doctorProfileId,
+        clinicId,
+        isActive: true,
+      },
+      order: { dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  async getClinicSchedule(clinicId: number): Promise<DoctorSchedule[]> {
+    return this.doctorScheduleRepository.find({
+      where: {
+        clinicId,
+        isActive: true,
+      },
+      relations: { doctorProfile: { user: true } },
+      order: { dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
   private validateSlots(slots: DoctorScheduleSlotDto[]): void {
     for (const slot of slots) {
       if (!this.isTimeRangeValid(slot.startTime, slot.endTime)) {
