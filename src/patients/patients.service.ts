@@ -244,11 +244,11 @@ export class PatientsService {
       missingFields.push('bloodType');
     }
 
-    if (!medicalProfile?.allergies || medicalProfile.allergies.length === 0) {
+    if (!medicalProfile || medicalProfile.allergies == null) {
       missingFields.push('allergies');
     }
 
-    if (!medicalProfile?.chronicConditions || medicalProfile.chronicConditions.length === 0) {
+    if (!medicalProfile || medicalProfile.chronicConditions == null) {
       missingFields.push('chronicDiseases');
     }
 

@@ -1,4 +1,5 @@
 import {
+	Check,
 	Column,
 	Entity,
 	OneToMany,
@@ -21,11 +22,12 @@ import { Wallet } from '../../wallets/entities/wallet.entity';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 
+@Check('CHK_users_email_phone_xor', '"email" IS NOT NULL AND "phone" IS NULL OR "email" IS NULL AND "phone" IS NOT NULL')
 @Entity({ name: 'users' })
 export class User extends BaseEntity {
 
-	@Column({ type: 'varchar', length: 255, unique: true })
-	email!: string;
+	@Column({ type: 'varchar', length: 255, unique: true, nullable: true })
+	email!: string | null;
 
 	@Column({ type: 'varchar', length: 50, default: 'local' })
 	provider!: string;

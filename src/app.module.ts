@@ -67,4 +67,4 @@ import { AdminsModule } from './admins/admins.module';
   controllers: [],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

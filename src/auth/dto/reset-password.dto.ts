@@ -1,10 +1,31 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
+import { EmailOrPhoneXor } from './identifier-xor.validator';
 
 export class ResetPasswordDto {
+  @EmailOrPhoneXor()
+  identifier?: string;
+
+  @ValidateIf((_, value) => value !== undefined && value !== null && value !== '')
   @IsEmail()
   @IsString()
   @IsNotEmpty()
-  email!: string;
+  email?: string;
+
+  @ValidateIf((_, value) => value !== undefined && value !== null && value !== '')
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
 
   @IsString()
   @IsNotEmpty()

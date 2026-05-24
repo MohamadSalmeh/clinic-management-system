@@ -1,16 +1,16 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
   Patch,
   Req,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { CurrentUser, Roles } from '../common/decorators';
-import { AuthRolesGuard } from '../auth/guards';
+import { AuthRolesGuard, VerifiedGuard } from '../auth/guards';
 import { ActiveUserData, CURRENT_USER_KEY, UserRole } from '../utils';
 import { UpdateUserDto, UserIdParamDto } from './dto';
 import { User } from './entities/user.entity';
@@ -39,11 +39,19 @@ export class UsersController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.PATIENT)
+  @UseGuards(VerifiedGuard)
   async update(
     @Param() params: UserIdParamDto,
     @Body() updateDto: UpdateUserDto,
     @CurrentUser() currentUser: ActiveUserData,
+    @Req() request: Request,
   ): Promise<User> {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    if ('email' in body || 'phone' in body) {
+      throw new BadRequestException('Email and phone cannot be updated');
+    }
+
     return this.usersService.update(params.id, updateDto, currentUser);
   }
 }

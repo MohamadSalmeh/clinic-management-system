@@ -9,6 +9,11 @@ export interface DoctorInvitationEmailData {
     expiresAt: Date;
 }
 
+export interface VerificationCodeEmailData {
+    toEmail: string;
+    code: string;
+}
+
 @Injectable()
 export class MailService {
     private readonly logger = new Logger(MailService.name);
@@ -64,6 +69,26 @@ export class MailService {
         await this.sendMail({
             to: data.toEmail,
             subject: "You're invited to join Clinic System as a Doctor",
+            html,
+            text,
+        });
+    }
+
+    async sendVerificationCodeEmail(data: VerificationCodeEmailData): Promise<void> {
+        const html = `
+            <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+                <h2>Verification Code</h2>
+                <p>Your verification code is:</p>
+                <p style="font-size: 24px; font-weight: bold;">${data.code}</p>
+                <p>This code expires in 15 minutes.</p>
+            </div>
+        `;
+
+        const text = `Your verification code is: ${data.code}. This code expires in 15 minutes.`;
+
+        await this.sendMail({
+            to: data.toEmail,
+            subject: 'Your verification code',
             html,
             text,
         });

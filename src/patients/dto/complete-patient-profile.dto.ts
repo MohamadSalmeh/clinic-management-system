@@ -1,4 +1,4 @@
-import { ArrayNotEmpty, IsArray, IsDateString, IsNotEmpty, IsString } from 'class-validator';
+import { IsArray, IsDateString, IsNotEmpty, IsString } from 'class-validator';
 
 export class CompletePatientProfileDto {
   @IsString()
@@ -6,12 +6,10 @@ export class CompletePatientProfileDto {
   bloodType!: string;
 
   @IsArray()
-  @ArrayNotEmpty()
   @IsString({ each: true })
   allergies!: string[];
 
   @IsArray()
-  @ArrayNotEmpty()
   @IsString({ each: true })
   chronicDiseases!: string[];
 

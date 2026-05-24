@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { AuthRolesGuard } from '../auth/guards';
+import { AuthRolesGuard, VerifiedGuard } from '../auth/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
 import { Appointment } from '../appointments/entities/appointment.entity';
@@ -22,7 +22,7 @@ import { PatientProfile } from './entities/patient-profile.entity';
 import { PatientsService, PatientAppointmentsGrouped, PatientProfileCompletionStatus, PatientWalletSummary } from './patients.service';
 
 @Controller('patients')
-@UseGuards(AuthRolesGuard)
+@UseGuards(AuthRolesGuard, VerifiedGuard)
 export class PatientsController {
   constructor(private readonly patientsService: PatientsService) {}
 

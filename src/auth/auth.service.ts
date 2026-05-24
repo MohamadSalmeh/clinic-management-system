@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+
 import {
   ChangePasswordDto,
   DoctorInviteRegisterDto,
@@ -20,6 +21,7 @@ import {
   LoginDto,
   RegisterDto,
   ResetPasswordDto,
+  VerifyAccountDto,
   VerifyResetCodeDto,
 } from './dto';
 import { AuthHelperProvider } from './providers';
@@ -35,6 +37,7 @@ import { AdminsService } from '../admins/admins.service';
 import { UserStatus } from '../users/enums/user-status.enum';
 import { PatientsService } from '../patients/patients.service';
 import { OtpService } from './services/otp.service';
+import { MailService } from '../mail/mail.service';
 
 type RefreshTokenPayload = Pick<JWTPayloadType, 'sub' | 'version'>;
 type AccountStatus = {
@@ -59,18 +62,24 @@ export class AuthService {
     @Inject(forwardRef(() => PatientsService))
     private readonly patientsService: PatientsService,
     private readonly otpService: OtpService,
-  ) {}
+    private readonly mailService: MailService,
+  ) { }
 
   async register(registerDto: RegisterDto): Promise<User> {
-    const normalizedEmail = registerDto.email.trim().toLowerCase();
+    const normalizedEmail = this.normalizeEmail(registerDto.email);
+    const normalizedPhone = this.normalizePhone(registerDto.phone);
 
-    const existingUser = await this.userRepository.findOne({
-      where: { email: normalizedEmail },
-    });
+    this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
+
+    const existingUser = await this.findExistingUser(normalizedEmail, normalizedPhone);
 
     if (existingUser) {
       if (existingUser.isVerified) {
-        throw new ConflictException('User with this email already exists');
+        throw new ConflictException('User with this email or phone already exists');
+      }
+
+      if (this.isGoogleAccount(existingUser)) {
+        throw new ConflictException('User with this email or phone already exists');
       }
 
       const hashedPassword = await this.authHelperProvider.hashPassword(
@@ -80,13 +89,15 @@ export class AuthService {
       const { code, expiresAt } = await this.generateVerificationCode();
 
       existingUser.password = hashedPassword;
-      existingUser.phone = registerDto.phone;
+      existingUser.email = normalizedEmail ?? existingUser.email ?? null;
+      existingUser.phone = normalizedPhone ?? existingUser.phone ?? null;
       existingUser.firstName = registerDto.firstName;
       existingUser.fatherName = registerDto.fatherName;
       existingUser.lastName = registerDto.lastName;
       existingUser.birthDate = new Date(registerDto.birthDate);
       existingUser.gender = registerDto.gender;
       existingUser.address = registerDto.address;
+      existingUser.status = UserStatus.ACTIVE;
       existingUser.avatarUrl = registerDto.avatarUrl ?? null;
       if (registerDto.preferredLanguage !== undefined) {
         existingUser.preferredLanguage = registerDto.preferredLanguage;
@@ -102,11 +113,9 @@ export class AuthService {
 
       const updatedUser = await this.userRepository.save(existingUser);
 
-      if (!updatedUser.phone) {
-        throw new BadRequestException('User phone number is missing');
-      }
-
-      await this.otpService.sendOtpWhatsApp(updatedUser.phone, code);
+      await this.sendVerificationCode(updatedUser, code, {
+        preferEmail: Boolean(normalizedEmail),
+      });
 
       return this.userRepository.findOneOrFail({
         where: { id: updatedUser.id },
@@ -122,7 +131,7 @@ export class AuthService {
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
-      phone: registerDto.phone,
+      phone: normalizedPhone,
       firstName: registerDto.firstName,
       fatherName: registerDto.fatherName,
       lastName: registerDto.lastName,
@@ -140,11 +149,9 @@ export class AuthService {
 
     const savedUser = await this.userRepository.save(user);
 
-    if (!savedUser.phone) {
-      throw new BadRequestException('User phone number is missing');
-    }
-
-    await this.otpService.sendOtpWhatsApp(savedUser.phone, code);
+    await this.sendVerificationCode(savedUser, code, {
+      preferEmail: Boolean(normalizedEmail),
+    });
 
     if (savedUser.role === UserRole.ADMIN) {
       await this.adminsService.createAdminProfile(savedUser.id);
@@ -156,19 +163,21 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponse> {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
+    const user = await this.validateUser(loginDto);
 
     return this.buildAuthResponse(user);
   }
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    const user = await this.userRepository.findOne({
-      where: { email: normalizedEmail },
-    });
+    const normalizedEmail = this.normalizeEmail(dto.email);
+    const normalizedPhone = this.normalizePhone(dto.phone);
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
+
+    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+
+    if (this.isGoogleAccount(user)) {
+      throw new BadRequestException('Password reset is not supported for Google accounts');
     }
 
     const { code, expiresAt } = await this.generateVerificationCode();
@@ -178,12 +187,10 @@ export class AuthService {
 
     const savedUser = await this.userRepository.save(user);
 
-    if (!savedUser.phone) {
-      throw new BadRequestException('User phone number is missing');
-    }
-
     try {
-      await this.otpService.sendOtpWhatsApp(savedUser.phone, code);
+      await this.sendVerificationCode(savedUser, code, {
+        preferEmail: Boolean(normalizedEmail),
+      });
     } catch (error) {
       this.logger.error('Failed to send reset OTP', error instanceof Error ? error.stack : undefined);
       throw error;
@@ -192,14 +199,18 @@ export class AuthService {
     return { message: 'Reset code sent successfully' };
   }
 
-  async verifyResetCode(dto: VerifyResetCodeDto): Promise<{ valid: true }> {
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    const user = await this.userRepository.findOne({
-      where: { email: normalizedEmail },
-    });
+  
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    const normalizedEmail = this.normalizeEmail(dto.email);
+    const normalizedPhone = this.normalizePhone(dto.phone);
+
+    this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
+
+    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+
+    if (this.isGoogleAccount(user)) {
+      throw new BadRequestException('Password reset is not supported for Google accounts');
     }
 
     if (!user.verificationCode || !user.verificationCodeExpiresAt) {
@@ -210,19 +221,6 @@ export class AuthService {
 
     if (user.verificationCode !== dto.code || expiresAt.getTime() < Date.now()) {
       throw new UnauthorizedException('Invalid or expired verification code');
-    }
-
-    return { valid: true };
-  }
-
-  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    const user = await this.userRepository.findOne({
-      where: { email: normalizedEmail },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
     }
 
     const hashedPassword = await this.authHelperProvider.hashPassword(
@@ -327,21 +325,26 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
-  async verifyAccount(userId: number, code: string): Promise<{ message: string }> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+  async verifyAccount(dto: VerifyAccountDto): Promise<{ message: string }> {
+    const normalizedEmail = this.normalizeEmail(dto.email);
+    const normalizedPhone = this.normalizePhone(dto.phone);
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
+
+    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+
+    if (this.isGoogleAccount(user)) {
+      throw new BadRequestException('Google accounts do not require verification');
     }
 
     if (!user.verificationCode || !user.verificationCodeExpiresAt) {
-      throw new UnauthorizedException('Invalid or expired verification code');
+      throw new UnauthorizedException('Invalid or expired verification code 1');
     }
 
     const expiresAt = new Date(user.verificationCodeExpiresAt);
 
-    if (user.verificationCode !== code || expiresAt.getTime() < Date.now()) {
-      throw new UnauthorizedException('Invalid or expired verification code');
+    if (user.verificationCode !== dto.code || expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException('Invalid or expired verification code 2');
     }
 
     user.isVerified = true;
@@ -353,11 +356,20 @@ export class AuthService {
     return { message: 'Account verified successfully' };
   }
 
-  async resendVerification(userId: number): Promise<{ message: string }> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+  async resendVerification(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const normalizedEmail = this.normalizeEmail(dto.email);
+    const normalizedPhone = this.normalizePhone(dto.phone);
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
+
+    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+
+    if (this.isGoogleAccount(user)) {
+      throw new BadRequestException('Google accounts do not require verification');
+    }
+
+    if (user.isVerified) {
+      throw new BadRequestException('Account is already verified');
     }
 
     const { code, expiresAt } = await this.generateVerificationCode();
@@ -367,11 +379,9 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
-    if (!user.phone) {
-      throw new BadRequestException('User phone number is missing');
-    }
-
-    await this.otpService.sendOtpWhatsApp(user.phone, code);
+    await this.sendVerificationCode(user, code, {
+      preferEmail: Boolean(normalizedEmail),
+    });
 
     return { message: 'Verification code sent' };
   }
@@ -607,21 +617,36 @@ export class AuthService {
     });
   }
 
-  async validateUser(email: string, password: string): Promise<User> {
-    const normalizedEmail = email.trim().toLowerCase();
+  async validateUser(loginDto: LoginDto): Promise<User> {
+    const normalizedEmail = this.normalizeEmail(loginDto.email);
+    const normalizedPhone = this.normalizePhone(loginDto.phone);
 
-    const userWithPassword = await this.userRepository
-      .createQueryBuilder('user')
-      .addSelect('user.password')
-      .where('LOWER(user.email) = :email', { email: normalizedEmail })
-      .getOne();
+    this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
+
+    let userWithPassword: User | null = null;
+
+    if (normalizedEmail) {
+      userWithPassword = await this.userRepository
+        .createQueryBuilder('user')
+        .addSelect('user.password')
+        .where('LOWER(user.email) = :email', { email: normalizedEmail })
+        .getOne();
+    }
+
+    if (!userWithPassword && normalizedPhone) {
+      userWithPassword = await this.userRepository
+        .createQueryBuilder('user')
+        .addSelect('user.password')
+        .where('user.phone = :phone', { phone: normalizedPhone })
+        .getOne();
+    }
 
     if (!userWithPassword || !userWithPassword.password) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const passwordMatches = await this.authHelperProvider.comparePassword(
-      password,
+      loginDto.password,
       userWithPassword.password,
     );
 
@@ -655,6 +680,101 @@ export class AuthService {
     return this.userRepository.findOneOrFail({ where: { id: userId } });
   }
 
+  private normalizeEmail(email?: string): string | null {
+    if (!email) {
+      return null;
+    }
+
+    const normalized = email.trim().toLowerCase();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private normalizePhone(phone?: string): string | null {
+    if (!phone) {
+      return null;
+    }
+
+    const normalized = phone.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private assertSingleIdentifier(email: string | null, phone: string | null): void {
+    const hasEmail = Boolean(email);
+    const hasPhone = Boolean(phone);
+
+    if (hasEmail === hasPhone) {
+      throw new BadRequestException('Provide exactly one of email or phone');
+    }
+  }
+
+  private isGoogleAccount(user: User): boolean {
+    return user.provider === 'google' || user.password === null;
+  }
+
+  private async findExistingUser(
+    email: string | null,
+    phone: string | null,
+  ): Promise<User | null> {
+    if (email) {
+      return this.userRepository.findOne({
+        where: { email },
+      });
+
+
+    }
+
+    if (phone) {
+      return this.userRepository.findOne({ where: { phone } });
+    }
+
+    return null;
+  }
+
+  private async findUserByIdentifier(
+    email: string | null,
+    phone: string | null,
+  ): Promise<User> {
+    const user = await this.findExistingUser(email, phone);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  private async sendVerificationCode(
+    user: User,
+    code: string,
+    options: { preferEmail: boolean },
+  ): Promise<void> {
+    const canSendEmail = Boolean(user.email);
+    const canSendPhone = Boolean(user.phone);
+
+    if (options.preferEmail && canSendEmail) {
+      await this.mailService.sendVerificationCodeEmail({
+        toEmail: user.email as string,
+        code,
+      });
+      return;
+    }
+
+    if (canSendPhone) {
+      await this.otpService.sendOtpWhatsApp(user.phone as string, code);
+      return;
+    }
+
+  /*  if (canSendEmail) {
+      await this.mailService.sendVerificationCodeEmail({
+        toEmail: user.email as string,
+        code,
+      });
+      return;
+    }*/
+
+    throw new BadRequestException('User contact information is missing');
+  }
+
 
   private async buildAuthResponse(user: User): Promise<AuthResponse> {
     const accessPayload = this.buildJwtPayload(user);
@@ -680,7 +800,9 @@ export class AuthService {
       refreshToken,
       user: {
         id: Number(user.id),
-        email: user.email,
+        email: user.email ?? null,
+        phone: user.phone ?? null,
+        provider: user.provider,
         role: user.role,
         fullName: `${user.firstName} ${user.lastName}`.replace(/\s+/g, ' ').trim(),
       },
@@ -691,7 +813,7 @@ export class AuthService {
   private buildJwtPayload(user: User): JWTPayloadType {
     return {
       sub: Number(user.id),
-      email: user.email,
+      email: user.email ?? null,
       usertype: user.role.toUpperCase() as JWTPayloadType['usertype'],
       version: user.tokenVersion,
     };

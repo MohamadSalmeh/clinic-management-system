@@ -1,14 +1,14 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
-import { AuthRolesGuard } from '../auth/guards';
+import { AuthRolesGuard, VerifiedGuard } from '../auth/guards';
 import { DoctorInvitationsService } from '../doctor-invitations/doctor-invitations.service';
 import { CreateDoctorInvitationDto } from './dto';
 import { AdminsService } from './admins.service';
 import { DoctorInvitation } from '../doctor-invitations/entities/doctor-invitation.entity';
 
 @Controller('admin')
-@UseGuards(AuthRolesGuard)
+@UseGuards(AuthRolesGuard, VerifiedGuard)
 @Roles(UserRole.ADMIN)
 export class AdminsController {
     constructor(

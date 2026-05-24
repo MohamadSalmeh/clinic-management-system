@@ -2,7 +2,7 @@ import { UserRole } from './enums';
 
 export type JWTPayloadType = {
   sub: number;
-  email: string;
+  email: string | null;
   usertype: Uppercase<`${UserRole}`>;
   version: number;
 };
@@ -17,7 +17,9 @@ export type AuthResponse = {
   refreshToken: string;
   user: {
     id: number;
-    email: string;
+    email: string | null;
+    phone: string | null;
+    provider: string;
     role: UserRole;
     fullName: string;
   };

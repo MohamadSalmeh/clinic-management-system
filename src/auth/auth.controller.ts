@@ -12,6 +12,9 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
+
+
 import { Request, Response } from 'express';
 import { CurrentUser, Public, Roles } from '../common/decorators';
 import {
@@ -47,14 +50,20 @@ type AuthenticatedRequest = Request & {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly logger = new Logger(AuthService.name);
+  constructor(private readonly authService: AuthService,
+
+  ) { }
 
   @Post('register')
+  @Public()
   async register(@Body() registerDto: RegisterDto): Promise<User> {
+    this.logger.log('Reached register method');
     return this.authService.register(registerDto);
   }
 
   @Post('login')
+  @Public()
   async login(@Body() loginDto: LoginDto): Promise<AuthResponse> {
     return this.authService.login(loginDto);
   }
@@ -75,6 +84,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(200)
+  @Public()
   async refresh(
     @Body('refreshToken') refreshToken: string,
   ): Promise<{ accessToken: string }> {
@@ -94,14 +104,6 @@ export class AuthController {
     return this.authService.forgotPassword(dto);
   }
 
-  @Post('verify-reset-code')
-  @HttpCode(200)
-  @Public()
-  async verifyResetCode(
-    @Body() dto: VerifyResetCodeDto,
-  ): Promise<{ valid: true }> {
-    return this.authService.verifyResetCode(dto);
-  }
 
   @Post('reset-password')
   @HttpCode(200)
@@ -116,10 +118,9 @@ export class AuthController {
   @HttpCode(200)
   @Public()
   async verifyAccount(
-    @Body('userId') userId: number,
-    @Body('code') code: string,
+    @Body() dto: VerifyAccountDto,
   ): Promise<{ message: string }> {
-    return this.authService.verifyAccount(userId, code);
+    return this.authService.verifyAccount(dto);
   }
 
   @Post('change-password')
@@ -137,19 +138,14 @@ export class AuthController {
     return this.authService.changePassword(Number(currentUser.sub), dto);
   }
 
-  
+
   @Post('resend-verification')
   @HttpCode(200)
-  @UseGuards(AuthRolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
+  @Public()
   async resendVerification(
-    @CurrentUser() currentUser: ActiveUserData | undefined,
+    @Body() dto: ForgotPasswordDto,
   ): Promise<{ message: string }> {
-    if (!currentUser) {
-      throw new UnauthorizedException('Authenticated user is missing in request');
-    }
-
-    return this.authService.resendVerification(Number(currentUser.sub));
+    return this.authService.resendVerification(dto);
   }
 
   @Get('status')
@@ -167,10 +163,12 @@ export class AuthController {
 
   @Get('google')
   @UseGuards(GoogleAuthGuard)
-  googleAuth(): void {}
+  @Public()
+  googleAuth(): void { }
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
+  @Public()
   async googleAuthCallback(
     @Req() request: GoogleAuthRequest,
     @Res() res: Response,
@@ -197,6 +195,7 @@ export class AuthController {
   }
 
   @Get('doctor-invite/:token')
+  @Public()
   async validateDoctorInvite(
     @Param('token') token: string,
   ): Promise<{ valid: true; email: string }> {
@@ -204,6 +203,7 @@ export class AuthController {
   }
 
   @Post('doctor-invite/:token/register')
+  @Public()
   async registerDoctorFromInvite(
     @Param('token') token: string,
     @Body() dto: DoctorInviteRegisterDto,
@@ -213,6 +213,7 @@ export class AuthController {
 
   @Post('doctor-invite/:token/reject')
   @HttpCode(200)
+  @Public()
   async rejectDoctorInvite(
     @Param('token') token: string,
   ): Promise<{ message: string }> {

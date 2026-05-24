@@ -75,10 +75,6 @@ export class UsersService {
       user.lastName = updateDto.lastName;
     }
 
-    if (updateDto.phone !== undefined) {
-      user.phone = updateDto.phone;
-    }
-
     if (updateDto.address !== undefined) {
       user.address = updateDto.address;
     }

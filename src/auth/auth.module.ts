@@ -11,10 +11,17 @@ import { AdminsModule } from '../admins/admins.module';
 import { PatientsModule } from '../patients/patients.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { AuthOptionalGuard, AuthRolesGuard, GoogleAuthGuard } from './guards';
+import {
+  AuthOptionalGuard,
+  AuthRolesGuard,
+  GoogleAuthGuard,
+  UnverifiedGuard,
+  VerifiedGuard,
+} from './guards';
 import { AuthHelperProvider } from './providers';
 import { GoogleStrategy } from './strategies';
 import { OtpService } from './services/otp.service';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -23,6 +30,7 @@ import { OtpService } from './services/otp.service';
     DoctorInvitationsModule,
     forwardRef(() => PatientsModule),
     forwardRef(() => UsersModule),
+    MailModule,
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -36,6 +44,8 @@ import { OtpService } from './services/otp.service';
     OtpService,
     AuthRolesGuard,
     AuthOptionalGuard,
+    VerifiedGuard,
+    UnverifiedGuard,
     GoogleAuthGuard,
     GoogleStrategy,
   ],

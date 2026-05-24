@@ -38,7 +38,7 @@ export class AuthOptionalGuard implements CanActivate {
                 secret: jwtSecret,
             });
 
-            if (payload?.sub && payload?.email && payload?.usertype) {
+            if (payload?.sub && payload?.usertype) {
                 request[CURRENT_USER_KEY] = payload;
             }
         } catch {

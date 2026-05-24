@@ -6,23 +6,30 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { Gender } from '../../users/enums/gender.enum';
 import { PreferredLanguage } from '../../users/enums/preferredLanguage.enum';
 import { ThemeMode } from '../../users/enums/themeMode.enum';
+import { EmailOrPhoneXor } from './identifier-xor.validator';
 
 export class RegisterDto {
+  @EmailOrPhoneXor()
+  identifier?: string;
+
+  @ValidateIf((_, value) => value !== undefined && value !== null && value !== '')
   @IsEmail()
-  email!: string;
+  email?: string;
 
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
   password!: string;
 
+  @ValidateIf((_, value) => value !== undefined && value !== null && value !== '')
   @IsString()
   @IsNotEmpty()
-  phone!: string;
+  phone?: string;
 
   @IsString()
   @IsNotEmpty()

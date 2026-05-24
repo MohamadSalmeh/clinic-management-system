@@ -17,6 +17,7 @@ import { User } from '../../users/entities/user.entity';
 
 type RequestWithUser = Request & {
   [CURRENT_USER_KEY]?: ActiveUserData;
+  userIsVerified?: boolean;
 };
 
 @Injectable()
@@ -54,7 +55,7 @@ export class AuthRolesGuard implements CanActivate {
 
     const user = await this.userRepository.findOne({
       where: { id: Number(payload.sub) },
-      select: ['id', 'tokenVersion'],
+      select: ['id', 'tokenVersion', 'isVerified'],
     });
 
     if (!user) {
@@ -66,6 +67,7 @@ export class AuthRolesGuard implements CanActivate {
     }
 
     request[CURRENT_USER_KEY] = payload;
+    request.userIsVerified = user.isVerified;
 
     if (requiredRoles.length === 0) {
       return true;
@@ -92,7 +94,6 @@ export class AuthRolesGuard implements CanActivate {
 
       if (
         !payload?.sub ||
-        !payload?.email ||
         !payload?.usertype ||
         typeof payload.version !== 'number'
       ) {
