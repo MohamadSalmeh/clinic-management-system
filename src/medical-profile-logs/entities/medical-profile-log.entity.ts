@@ -49,7 +49,6 @@ export class MedicalProfileLog extends BaseEntity {
   @Column({ name: 'appointment_id', type: 'bigint', nullable: true })
   appointmentId!: number | null;
 
-  @Index()
   @ManyToOne(() => Appointment, (appointment) => appointment.medicalProfileLogs, {
     onDelete: 'SET NULL',
     nullable: true,

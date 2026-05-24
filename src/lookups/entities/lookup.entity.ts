@@ -16,6 +16,9 @@ export class Lookup extends BaseEntity {
   @Column({ name: 'label_ar', type: 'varchar', length: 255 })
   labelAr!: string;
 
+  @Column({ name: 'parent_id', type: 'integer', nullable: true })
+  parentId?: number | null;
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 }
