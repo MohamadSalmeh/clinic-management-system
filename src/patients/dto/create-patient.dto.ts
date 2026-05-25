@@ -1,34 +1,31 @@
 import { Transform } from 'class-transformer';
 import {
   IsEnum,
-  IsIn,
   IsInt,
-  IsNotEmpty,
+  IsOptional,
   IsString,
   Min,
 } from 'class-validator';
 import { MaritalStatus } from '../../users/enums/marital-status.enum';
 
 class CreatePatientProfileBaseDto {
-  @Transform(({ value }) => Number(value))
-  @IsInt()
-  @Min(1)
-  userId!: number;
+  
 
+  @IsOptional()
   @IsEnum(MaritalStatus)
-  maritalStatus!: MaritalStatus;
+  maritalStatus?: MaritalStatus;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  occupation!: string;
+  occupation?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  emergencyContactName!: string;
+  emergencyContactName?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  emergencyContactPhone!: string;
+  emergencyContactPhone?: string;
 
 }
 

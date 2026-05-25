@@ -1,9 +1,12 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MedicalProfileLogsModule } from '../medical-profile-logs/medical-profile-logs.module';
 import { PatientProfile } from '../patients/entities/patient-profile.entity';
 import { MedicalHistory } from '../medical-histories/entities/medical-history.entity';
+import { AuthModule } from '../auth';
 import { MedicalProfile } from './entities/medical-profile.entity';
+import { MedicalProfilesController } from './medical-profiles.controller';
+import { MedicalProfilesService } from './medical-profiles.service';
 
 @Module({
   imports: [
@@ -13,8 +16,10 @@ import { MedicalProfile } from './entities/medical-profile.entity';
       MedicalHistory,
     ]),
     MedicalProfileLogsModule,
+    forwardRef(() => AuthModule),
   ],
- 
-  exports: [ TypeOrmModule],
+  controllers: [MedicalProfilesController],
+  providers: [MedicalProfilesService],
+  exports: [TypeOrmModule, MedicalProfilesService],
 })
 export class MedicalProfilesModule {}

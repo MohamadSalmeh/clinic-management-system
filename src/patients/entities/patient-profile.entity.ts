@@ -13,17 +13,17 @@ export class PatientProfile extends BaseEntity {
   @Column({ type: 'bigint', unique: true })
   userId!: number;
 
-  @Column({ name: 'marital_status', type: 'enum', enum: MaritalStatus,default: MaritalStatus.SINGLE })
-  maritalStatus!: MaritalStatus;
+  @Column({ name: 'marital_status', type: 'enum', enum: MaritalStatus, nullable: true })
+  maritalStatus!: MaritalStatus | null;
 
-  @Column({ type: 'varchar', length: 100,nullable: true })
-  occupation!: string;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  occupation!: string | null;
 
-  @Column({ name: 'emergency_contact_name', type: 'varchar', length: 255 ,nullable: true})
-  emergencyContactName!: string;
+  @Column({ name: 'emergency_contact_name', type: 'varchar', length: 255, nullable: true })
+  emergencyContactName!: string | null;
 
-  @Column({ name: 'emergency_contact_phone', type: 'varchar', length: 20 })
-  emergencyContactPhone!: string;
+  @Column({ name: 'emergency_contact_phone', type: 'varchar', length: 20, nullable: true })
+  emergencyContactPhone!: string | null;
 
   @OneToOne(() => User, (user) => user.patientProfile, {
     onDelete: 'CASCADE',

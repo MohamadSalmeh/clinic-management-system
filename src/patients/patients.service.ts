@@ -122,55 +122,9 @@ export class PatientsService {
     return this.getProfile(userId);
   }
 
-  async getProfileCompletion(userId: number): Promise<PatientProfileCompletionStatus> {
-    const patientProfile = await this.patientProfileRepository.findOne({
-      where: { userId },
-      relations: {
-        user: true,
-        medicalProfile: true,
-      },
-    });
+  
 
-    if (!patientProfile) {
-      throw new NotFoundException('Patient profile not found');
-    }
-
-    return this.buildCompletionStatus(patientProfile);
-  }
-
-  async completeProfile(
-    userId: number,
-    completeDto: CompletePatientProfileDto,
-  ): Promise<PatientProfileCompletionStatus> {
-    const patientProfile = await this.patientProfileRepository.findOne({
-      where: { userId },
-      relations: {
-        user: true,
-        medicalProfile: true,
-      },
-    });
-
-    if (!patientProfile) {
-      throw new NotFoundException('Patient profile not found');
-    }
-
-    const birthDate = new Date(completeDto.birthDate);
-    patientProfile.user.birthDate = birthDate;
-    await this.userRepository.save(patientProfile.user);
-
-    const medicalProfile = patientProfile.medicalProfile ??
-      this.medicalProfileRepository.create({ patientProfileId: patientProfile.id });
-
-    medicalProfile.bloodType = completeDto.bloodType;
-    medicalProfile.allergies = completeDto.allergies;
-    medicalProfile.chronicConditions = completeDto.chronicDiseases;
-
-    await this.medicalProfileRepository.save(medicalProfile);
-
-    patientProfile.medicalProfile = medicalProfile;
-
-    return this.buildCompletionStatus(patientProfile);
-  }
+  
 
   async getWallet(userId: number): Promise<PatientWalletSummary | null> {
     const patientProfile = await this.patientProfileRepository.findOne({
