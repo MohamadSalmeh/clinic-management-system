@@ -1,12 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
   UnauthorizedException,
-  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -35,7 +33,7 @@ import { DoctorInvitationStatus } from '../doctor-invitations/enums/doctor-invit
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { AdminsService } from '../admins/admins.service';
 import { UserStatus } from '../users/enums/user-status.enum';
-import { PatientsService } from '../patients/patients.service';
+import { MedicalProfilesService } from '../medical-profiles/medical-profiles.service';
 import { OtpService } from './services/otp.service';
 import { MailService } from '../mail/mail.service';
 
@@ -59,8 +57,7 @@ export class AuthService {
     private readonly authHelperProvider: AuthHelperProvider,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    @Inject(forwardRef(() => PatientsService))
-    private readonly patientsService: PatientsService,
+    private readonly medicalProfilesService: MedicalProfilesService,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
   ) { }
@@ -397,8 +394,8 @@ export class AuthService {
 
     if (user.role === UserRole.PATIENT) {
       try {
-        const completion = await this.patientsService.getProfileCompletion(userId);
-        isProfileCompleted = completion.isComplete;
+        const completion = await this.medicalProfilesService.getCompletionStatus(userId);
+        isProfileCompleted = completion.completed;
       } catch (error) {
         if (error instanceof NotFoundException) {
           isProfileCompleted = false;

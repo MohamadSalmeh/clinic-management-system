@@ -2,27 +2,27 @@ import { PartialType } from '@nestjs/mapped-types';
 import { Transform } from 'class-transformer';
 import {
   IsEnum,
-  IsIn,
-  IsNotEmpty,
+  IsOptional,
   IsString,
 } from 'class-validator';
 import { MaritalStatus } from '../../users/enums/marital-status.enum';
 
 class UpdatePatientBaseDto {
+  @IsOptional()
   @IsEnum(MaritalStatus)
-  maritalStatus!: MaritalStatus;
+  maritalStatus?: MaritalStatus;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  occupation!: string;
+  occupation?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  emergencyContactName!: string;
+  emergencyContactName?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  emergencyContactPhone!: string;
+  emergencyContactPhone?: string;
 
 }
 

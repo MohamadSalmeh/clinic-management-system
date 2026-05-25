@@ -27,9 +27,9 @@ export class MedicalProfile extends BaseEntity {
     name: 'pregnancy_status',
     type: 'enum',
     enum: PregnancyStatus,
-    default: PregnancyStatus.NOT_PREGNANT,
+    nullable: true
   })
-  pregnancyStatus!: PregnancyStatus;
+  pregnancyStatus!: PregnancyStatus | null ;
 
   @Column({ name: 'disability_info', type: 'text', nullable: true })
   disabilityInfo!: string | null;

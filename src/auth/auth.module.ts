@@ -5,10 +5,10 @@ import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { getJwtConfig } from './config';
 import { UsersModule } from '../users/users.module';
 import { AdminsModule } from '../admins/admins.module';
-import { PatientsModule } from '../patients/patients.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import {
@@ -22,15 +22,18 @@ import { AuthHelperProvider } from './providers';
 import { GoogleStrategy } from './strategies';
 import { OtpService } from './services/otp.service';
 import { MailModule } from '../mail/mail.module';
+import { MedicalProfilesModule } from '../medical-profiles/medical-profiles.module';
+import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
-    AdminsModule,
+    forwardRef(() => AdminsModule),
     DoctorsModule,
     DoctorInvitationsModule,
-    forwardRef(() => PatientsModule),
     forwardRef(() => UsersModule),
+    forwardRef(() => MedicalProfilesModule),
     MailModule,
+    TypeOrmModule.forFeature([User]),
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -49,6 +52,6 @@ import { MailModule } from '../mail/mail.module';
     GoogleAuthGuard,
     GoogleStrategy,
   ],
-  exports: [JwtModule, AuthService, OtpService],
+  exports: [JwtModule, TypeOrmModule, AuthService, OtpService, AuthRolesGuard, VerifiedGuard],
 })
 export class AuthModule {}
