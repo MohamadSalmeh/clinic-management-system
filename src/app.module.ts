@@ -12,14 +12,20 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { LookupsModule } from './lookups/lookups.module';
 import { MedicalProfileLogsModule } from './medical-profile-logs/medical-profile-logs.module';
 import { MedicalProfilesModule } from './medical-profiles/medical-profiles.module';
+import { MedicalAttachmentsModule } from './medical-attachments/medical-attachments.module';
+import { MedicalHistoriesModule } from './medical-histories/medical-histories.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PatientsModule } from './patients/patients.module';
+import { ReferralsModule } from './referrals/referrals.module';
+import { TransactionsModule } from './transactions/transactions.module';
 import { UsersModule } from './users/users.module';
 import { WalletsModule } from './wallets/wallets.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PrescribedMedicinesModule } from './prescribed-medicines/prescribed-medicines.module';
 import { QueuesModule } from './queues/queues.module';
 import { AdminsModule } from './admins/admins.module';
+import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
 
 @Module({
   imports: [
@@ -33,15 +39,21 @@ import { AdminsModule } from './admins/admins.module';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
-        return {
+       return {
           type: 'postgres',
           database: config.get<string>('DB_DB'),
           username: config.get<string>('DB_USERNAME'),
           password: config.get<string>('DB_PASSWORD'),
           host: config.get<string>('DB_HOST'),
+       
           port: config.get<number>('DB_PORT'),
-          synchronize: process.env.NODE_ENV !== 'production', // Synchronize only in non-production environments
+        //  dropSchema: true,
+        //   autoLoadEntities: true,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: process.env.NODE_ENV !== 'production', // Synchronize only in non-production environments
+        // 
+       // 
+       
         };
       },
     }),
@@ -57,12 +69,19 @@ import { AdminsModule } from './admins/admins.module';
     LookupsModule,
     MedicalProfileLogsModule,
     MedicalProfilesModule,
+    MedicalAttachmentsModule,
+    MedicalHistoriesModule,
     NotificationsModule,
     WalletsModule,
     RatingsModule,
     PaymentsModule,
+    PrescribedMedicinesModule,
     QueuesModule,
     AdminsModule,
+    ReferralsModule,
+    TransactionsModule,
+    DoctorLeavesModule,
+    
   ],
   controllers: [],
   providers: [AppService],

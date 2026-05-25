@@ -26,7 +26,7 @@ import { MailModule } from '../mail/mail.module';
 @Module({
   imports: [
     AdminsModule,
-    DoctorsModule,
+    forwardRef(() => DoctorsModule),
     DoctorInvitationsModule,
     forwardRef(() => PatientsModule),
     forwardRef(() => UsersModule),
