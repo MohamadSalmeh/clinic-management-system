@@ -1,11 +1,16 @@
 import { BaseEntity } from '../../common/entities/base.entity';
+import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
 import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 
 @Entity({ name: 'doctor_leaves' })
 export class DoctorLeave extends BaseEntity {
     @Index()
-    @Column({ name: 'doctor_profile_id', type: 'bigint' })
+    @Column({
+        name: 'doctor_profile_id',
+        type: 'bigint',
+        transformer: new ColumnNumericTransformer(),
+    })
     doctorProfileId!: number;
 
     @Column({ name: 'exception_date', type: 'date' })

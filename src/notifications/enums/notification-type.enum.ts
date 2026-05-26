@@ -1,7 +1,6 @@
 export enum NotificationType {
   APPOINTMENT = 'APPOINTMENT',
-  PAYMENT = 'PAYMENT',
-  REMINDER = 'REMINDER',
-  RATING = 'RATING',
+  REFERRAL = 'REFERRAL',
   SYSTEM = 'SYSTEM',
+  LEAVE = 'LEAVE',
 }

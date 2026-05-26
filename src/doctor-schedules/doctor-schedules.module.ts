@@ -5,6 +5,7 @@ import { Appointment } from '../appointments/entities/appointment.entity';
 import { AuthModule } from '../auth/auth.module';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { UsersModule } from '../users/users.module';
+import { DoctorsModule } from '../doctors/doctors.module';
 import { DoctorSchedulesController } from './doctor-schedules.controller';
 import { DoctorSchedulesService } from './doctor-schedules.service';
 import { DoctorSchedule } from './entities/doctor-schedule.entity';
@@ -21,6 +22,7 @@ import { DoctorScheduleRequest } from './entities/doctor-schedule-request.entity
     JwtModule,
     forwardRef(() => AuthModule),
     forwardRef(() => UsersModule),
+    forwardRef(() => DoctorsModule),
   ],
   controllers: [DoctorSchedulesController],
   providers: [DoctorSchedulesService],

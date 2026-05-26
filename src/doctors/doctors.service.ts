@@ -5,6 +5,8 @@ import { UpdateDoctorProfileDto } from './dto';
 import { DoctorProfile } from './entities/doctor-profile.entity';
 import { User } from '../users/entities/user.entity';
 import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
+import { DoctorAdminLogsService } from './doctor-admin-logs.service';
+import { DoctorAdminLogType } from './entities/doctor-admin-log.entity';
 
 export type DoctorProfileCompletionStatus = {
   isComplete: boolean;
@@ -30,6 +32,7 @@ export class DoctorsService {
     private readonly doctorProfileRepository: Repository<DoctorProfile>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly doctorAdminLogsService: DoctorAdminLogsService,
   ) {}
 
   async updateProfile(
@@ -44,6 +47,9 @@ export class DoctorsService {
     if (!profile) {
       throw new NotFoundException('Doctor profile not found');
     }
+
+    const oldInitialVisitFee = profile.initialVisitFee;
+    const oldReturnVisitFee = profile.returnVisitFee;
 
     if (dto.gender !== undefined && profile.user) {
       profile.user.gender = dto.gender;
@@ -73,6 +79,14 @@ export class DoctorsService {
       profile.bio = dto.bio;
     }
 
+    if (dto.initialVisitFee !== undefined) {
+      profile.initialVisitFee = dto.initialVisitFee;
+    }
+
+    if (dto.returnVisitFee !== undefined) {
+      profile.returnVisitFee = dto.returnVisitFee;
+    }
+
     if (dto.languagesSpoken !== undefined) {
       profile.languagesSpoken = dto.languagesSpoken;
     }
@@ -90,6 +104,30 @@ export class DoctorsService {
 
       if (!updatedProfile) {
         throw new NotFoundException('Doctor profile not found');
+      }
+
+      if (dto.initialVisitFee !== undefined && dto.initialVisitFee !== oldInitialVisitFee) {
+        await this.doctorAdminLogsService.createLog(
+          updatedProfile.id,
+          DoctorAdminLogType.FEE_UPDATE,
+          'initialVisitFee',
+          oldInitialVisitFee ?? null,
+          dto.initialVisitFee,
+          userId,
+          null,
+        );
+      }
+
+      if (dto.returnVisitFee !== undefined && dto.returnVisitFee !== oldReturnVisitFee) {
+        await this.doctorAdminLogsService.createLog(
+          updatedProfile.id,
+          DoctorAdminLogType.FEE_UPDATE,
+          'returnVisitFee',
+          oldReturnVisitFee ?? null,
+          dto.returnVisitFee,
+          userId,
+          null,
+        );
       }
 
       return {

@@ -1,5 +1,14 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { IsArray, IsDateString, IsEnum, IsInt, IsString, Min } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsNumberString,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { Gender } from '../../users/enums/gender.enum';
 
 class UpdateDoctorProfileBaseDto {
@@ -24,6 +33,14 @@ class UpdateDoctorProfileBaseDto {
 
   @IsString()
   bio!: string;
+
+  @IsOptional()
+  @IsNumberString()
+  initialVisitFee?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  returnVisitFee?: string;
 
   @IsArray()
   @IsString({ each: true })

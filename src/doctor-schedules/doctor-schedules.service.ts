@@ -14,6 +14,8 @@ import {
   DoctorScheduleRequest,
   DoctorScheduleRequestStatus,
 } from './entities/doctor-schedule-request.entity';
+import { DoctorAdminLogsService } from '../doctors/doctor-admin-logs.service';
+import { DoctorAdminLogType } from '../doctors/entities/doctor-admin-log.entity';
 
 @Injectable()
 export class DoctorSchedulesService {
@@ -29,6 +31,7 @@ export class DoctorSchedulesService {
     @InjectRepository(Appointment)
     private readonly appointmentRepository: Repository<Appointment>,
     private readonly dataSource: DataSource,
+    private readonly doctorAdminLogsService: DoctorAdminLogsService,
   ) {}
 
   async createOrUpdateWeeklyTemplate(
@@ -124,6 +127,7 @@ export class DoctorSchedulesService {
     requestId: number,
     status: DoctorScheduleRequestStatus,
     adminNotes?: string,
+    adminUserId?: number,
   ): Promise<{ message: string }> {
     const request = await this.doctorScheduleRequestRepository.findOne({
       where: { id: requestId },
@@ -145,9 +149,20 @@ export class DoctorSchedulesService {
       return { message: 'Schedule request rejected.' };
     }
 
+    let oldSchedulesSnapshot: DoctorSchedule[] = [];
+    let newSchedulesSnapshot: DoctorScheduleRequest[] = [];
+
     await this.dataSource.transaction(async (manager) => {
       const requestRepository = manager.getRepository(DoctorScheduleRequest);
       const scheduleRepository = manager.getRepository(DoctorSchedule);
+
+      oldSchedulesSnapshot = await scheduleRepository.find({
+        where: {
+          doctorProfileId: request.doctorProfileId,
+          clinicId: request.clinicId,
+          dayOfWeek: request.dayOfWeek,
+        },
+      });
 
       const pendingRequests = await requestRepository.find({
         where: {
@@ -161,6 +176,8 @@ export class DoctorSchedulesService {
       if (pendingRequests.length === 0) {
         throw new BadRequestException('No pending schedule requests found to approve');
       }
+
+      newSchedulesSnapshot = pendingRequests;
 
       await scheduleRepository.delete({
         doctorProfileId: request.doctorProfileId,
@@ -196,6 +213,18 @@ export class DoctorSchedulesService {
         },
       );
     });
+
+    if (adminUserId !== undefined) {
+      await this.doctorAdminLogsService.createLog(
+        request.doctorProfileId,
+        DoctorAdminLogType.SCHEDULE_APPROVE,
+        'schedule',
+        oldSchedulesSnapshot.length > 0 ? JSON.stringify(oldSchedulesSnapshot) : null,
+        JSON.stringify(newSchedulesSnapshot),
+        adminUserId,
+        request.notes ?? null,
+      );
+    }
 
     return { message: 'Schedule request approved and applied.' };
   }
