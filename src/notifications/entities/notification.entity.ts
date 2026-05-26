@@ -10,14 +10,19 @@ import { NotificationPriority } from '../enums/notification-priority.enum';
 import { NotificationStatus } from '../enums/notification-status.enum';
 import { NotificationType } from '../enums/notification-type.enum';
 import { NotificationTargetType } from '../enums/notification-target-type.enum';
-import {BaseEntity} from "../../common/entities/base.entity";
+import { BaseEntity } from '../../common/entities/base.entity';
+import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
 
 @Entity({ name: 'notifications' })
 export class Notification extends BaseEntity {
   
 
   @Index()
-  @Column({ name: 'user_id', type: 'bigint' })
+  @Column({
+    name: 'user_id',
+    type: 'bigint',
+    transformer: new ColumnNumericTransformer(),
+  })
   userId!: number;
 
   @Column({ type: 'varchar', length: 255 })
@@ -45,7 +50,12 @@ export class Notification extends BaseEntity {
   targetType!: NotificationTargetType | null;
 
   @Index()
-  @Column({ name: 'target_id', type: 'bigint', nullable: true })
+  @Column({
+    name: 'target_id',
+    type: 'bigint',
+    nullable: true,
+    transformer: new ColumnNumericTransformer(),
+  })
   targetId!: number | null;
 
   @Column({ name: 'sent_at', type: 'timestamp', nullable: true })

@@ -74,6 +74,7 @@ export class DoctorSchedulesController {
   @UseGuards(AuthRolesGuard)
   @Roles(UserRole.ADMIN)
   updateRequestStatus(
+    @CurrentUser() user: ActiveUserData,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDoctorScheduleRequestStatusDto,
   ) {
@@ -81,6 +82,7 @@ export class DoctorSchedulesController {
       id,
       dto.status,
       dto.adminNotes,
+      Number(user.sub),
     );
   }
 }
