@@ -14,15 +14,18 @@ import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
 import { AppointmentsService } from './index';
 import type { AppointmentGroupedResponse } from './index';
+import { CalculateAppointmentTimeDto } from './dto/calculate-appointment-time.dto';
 import {
     AdminAppointmentQueryDto,
     AppointmentQueryDto,
     CancelAppointmentDto,
     CreateAppointmentDto,
     DoctorAppointmentQueryDto,
-   // RescheduleAppointmentDto,
+    // RescheduleAppointmentDto,
 } from './dto';
 import { Appointment } from './entities/appointment.entity';
+import { WaitListDto } from './dto';
+import { AvailableDaysDto } from './dto';
 
 @Controller('appointments')
 @UseGuards(AuthRolesGuard, VerifiedGuard)
@@ -125,14 +128,35 @@ export class AppointmentsController {
     ): Promise<Appointment> {
         return this.appointmentsService.markNoShow(id, currentUser);
     }
+    @Post('next-time')
+    @Roles(UserRole.PATIENT)
+    calculateNextTime(
+        @Body() dto: CalculateAppointmentTimeDto,
+    ) {
+        return this.appointmentsService.calculateNextAvailableTime(dto);
+    }
 
-   /* @Patch(':id/reschedule')
-    @Roles(UserRole.PATIENT, UserRole.DOCTOR)
-    rescheduleAppointment(
-        @Param('id', ParseIntPipe) id: number,
-        @CurrentUser() currentUser: ActiveUserData,
-        @Body() dto: RescheduleAppointmentDto,
-    ): Promise<Appointment> {
-        return this.appointmentsService.rescheduleAppointment(id, currentUser, dto);
-    }*/
+    /* @Patch(':id/reschedule')
+     @Roles(UserRole.PATIENT, UserRole.DOCTOR)
+     rescheduleAppointment(
+         @Param('id', ParseIntPipe) id: number,
+         @CurrentUser() currentUser: ActiveUserData,
+         @Body() dto: RescheduleAppointmentDto,
+     ): Promise<Appointment> {
+         return this.appointmentsService.rescheduleAppointment(id, currentUser, dto);
+     }*/
+    @Post('wait-list')
+    @Roles(UserRole.PATIENT)
+    getWaitList(
+        @Body() dto: WaitListDto,
+    ) {
+        return this.appointmentsService.getWaitList(dto);
+    }
+    @Post('available-days')
+    @Roles(UserRole.PATIENT)
+    getAvailableDays(
+        @Body() dto: AvailableDaysDto,
+    ) {
+        return this.appointmentsService.getAvailableDays(dto);
+    }
 }
