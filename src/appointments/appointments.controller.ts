@@ -1,22 +1,138 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    Get,
+    Param,
+    ParseIntPipe,
+    Patch,
+    Post,
+    Query,
+    UseGuards,
+} from '@nestjs/common';
 import { AuthRolesGuard, VerifiedGuard } from '../auth/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
+import { AppointmentsService } from './index';
+import type { AppointmentGroupedResponse } from './index';
+import {
+    AdminAppointmentQueryDto,
+    AppointmentQueryDto,
+    CancelAppointmentDto,
+    CreateAppointmentDto,
+    DoctorAppointmentQueryDto,
+   // RescheduleAppointmentDto,
+} from './dto';
 import { Appointment } from './entities/appointment.entity';
-import { PatientAppointmentsQueryDto } from '../patients/dto';
-import { PatientsService, PatientAppointmentsGrouped } from '../patients/patients.service';
 
 @Controller('appointments')
 @UseGuards(AuthRolesGuard, VerifiedGuard)
 export class AppointmentsController {
-  constructor(private readonly patientsService: PatientsService) {}
+    constructor(private readonly appointmentsService: AppointmentsService) { }
 
-  @Get('my')
-  @Roles(UserRole.PATIENT)
-  async listAppointments(
-    @Query() query: PatientAppointmentsQueryDto,
-    @CurrentUser() currentUser: ActiveUserData,
-  ): Promise<Appointment[] | PatientAppointmentsGrouped> {
-    return this.patientsService.getAppointments(currentUser.sub, query.status);
-  }
+    @Post()
+    @Roles(UserRole.PATIENT)
+    createAppointment(
+        @CurrentUser() currentUser: ActiveUserData,
+        @Body() dto: CreateAppointmentDto,
+    ): Promise<Appointment> {
+        return this.appointmentsService.createAppointment(currentUser.sub, dto);
+    }
+
+    @Get('my/upcoming')
+    @Roles(UserRole.PATIENT)
+    getMyUpcomingAppointments(
+        @CurrentUser() currentUser: ActiveUserData,
+    ): Promise<Appointment[]> {
+        return this.appointmentsService.getMyUpcomingAppointments(currentUser.sub);
+    }
+
+    @Get('my')
+    @Roles(UserRole.PATIENT)
+    getMyAppointments(
+        @CurrentUser() currentUser: ActiveUserData,
+        @Query() query: AppointmentQueryDto,
+    ): Promise<Appointment[] | AppointmentGroupedResponse> {
+        return this.appointmentsService.getMyAppointments(currentUser.sub, query);
+    }
+
+    @Get('doctor/me/upcoming')
+    @Roles(UserRole.DOCTOR)
+    getDoctorUpcomingAppointments(
+        @CurrentUser() currentUser: ActiveUserData,
+    ): Promise<Appointment[]> {
+        return this.appointmentsService.getDoctorUpcomingAppointments(currentUser.sub);
+    }
+
+    @Get('doctor/me')
+    @Roles(UserRole.DOCTOR)
+    getDoctorAppointments(
+        @CurrentUser() currentUser: ActiveUserData,
+        @Query() query: DoctorAppointmentQueryDto,
+    ): Promise<Appointment[]> {
+        return this.appointmentsService.getDoctorAppointments(currentUser.sub, query);
+    }
+
+    @Get('admin')
+    @Roles(UserRole.ADMIN)
+    getAdminAppointments(
+        @Query() query: AdminAppointmentQueryDto,
+    ): Promise<Appointment[]> {
+        return this.appointmentsService.getAdminAppointments(query);
+    }
+
+    @Get(':id')
+    @Roles(UserRole.PATIENT, UserRole.DOCTOR, UserRole.ADMIN)
+    getAppointmentById(
+        @Param('id', ParseIntPipe) id: number,
+        @CurrentUser() currentUser: ActiveUserData,
+    ): Promise<Appointment> {
+        return this.appointmentsService.getAppointmentById(id, currentUser);
+    }
+
+    @Patch(':id/cancel')
+    @Roles(UserRole.PATIENT, UserRole.DOCTOR, UserRole.ADMIN)
+    cancelAppointment(
+        @Param('id', ParseIntPipe) id: number,
+        @CurrentUser() currentUser: ActiveUserData,
+        @Body() dto: CancelAppointmentDto,
+    ): Promise<Appointment> {
+        return this.appointmentsService.cancelAppointment(id, currentUser, dto);
+    }
+
+    @Patch(':id/complete')
+    @Roles(UserRole.DOCTOR)
+    completeAppointment(
+        @Param('id', ParseIntPipe) id: number,
+        @CurrentUser() currentUser: ActiveUserData,
+    ): Promise<Appointment> {
+        return this.appointmentsService.completeAppointment(id, currentUser);
+    }
+
+    @Patch(':id/check-in')
+    @Roles(UserRole.DOCTOR)
+    checkInAppointment(
+        @Param('id', ParseIntPipe) id: number,
+        @CurrentUser() currentUser: ActiveUserData,
+    ): Promise<Appointment> {
+        return this.appointmentsService.checkInAppointment(id, currentUser);
+    }
+
+    @Patch(':id/no-show')
+    @Roles(UserRole.DOCTOR)
+    noShowAppointment(
+        @Param('id', ParseIntPipe) id: number,
+        @CurrentUser() currentUser: ActiveUserData,
+    ): Promise<Appointment> {
+        return this.appointmentsService.markNoShow(id, currentUser);
+    }
+
+   /* @Patch(':id/reschedule')
+    @Roles(UserRole.PATIENT, UserRole.DOCTOR)
+    rescheduleAppointment(
+        @Param('id', ParseIntPipe) id: number,
+        @CurrentUser() currentUser: ActiveUserData,
+        @Body() dto: RescheduleAppointmentDto,
+    ): Promise<Appointment> {
+        return this.appointmentsService.rescheduleAppointment(id, currentUser, dto);
+    }*/
 }
