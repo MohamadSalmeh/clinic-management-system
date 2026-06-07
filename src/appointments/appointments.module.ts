@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth';
 import { MedicalProfilesModule } from '../medical-profiles/medical-profiles.module';
@@ -12,6 +12,7 @@ import { MedicalProfile } from '../medical-profiles/entities/medical-profile.ent
 import { Appointment } from './entities/appointment.entity';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './index';
+import { QueuesModule } from '../queues/queues.module'; // سطر الإضافة الجديد
 
 @Module({
   imports: [
@@ -27,9 +28,10 @@ import { AppointmentsService } from './index';
     ]),
     AuthModule,
     MedicalProfilesModule,
+    forwardRef(() => QueuesModule), // الإضافة هنا لربط موديول الـ Queue
   ],
   controllers: [AppointmentsController],
   providers: [AppointmentsService],
-  exports: [TypeOrmModule],
+  exports: [TypeOrmModule,AppointmentsService],
 })
 export class AppointmentsModule {}

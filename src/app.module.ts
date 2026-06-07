@@ -30,7 +30,7 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, // Make the ConfigModule available globally
+      isGlobal: true,
       envFilePath: process.env.NODE_ENV
         ? `.env.${process.env.NODE_ENV}`
         : '.env',
@@ -39,21 +39,15 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
-       return {
+        return {
           type: 'postgres',
           database: config.get<string>('DB_DB'),
           username: config.get<string>('DB_USERNAME'),
           password: config.get<string>('DB_PASSWORD'),
           host: config.get<string>('DB_HOST'),
-       
           port: config.get<number>('DB_PORT'),
-        //  dropSchema: true,
-        //   autoLoadEntities: true,
-          entities: [__dirname + '/**/*.entity{.ts,.js}'],
-          synchronize: process.env.NODE_ENV !== 'production', // Synchronize only in non-production environments
-        // 
-       // 
-       
+          autoLoadEntities: true,
+          synchronize: process.env.NODE_ENV !== 'production',
         };
       },
     }),
@@ -81,9 +75,8 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
     ReferralsModule,
     TransactionsModule,
     DoctorLeavesModule,
-    
   ],
   controllers: [],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}
