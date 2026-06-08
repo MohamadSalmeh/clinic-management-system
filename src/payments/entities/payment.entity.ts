@@ -25,11 +25,32 @@ export class Payment extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   amount!: string;
 
+  @Column({
+    name: 'penalty_amount',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    default: 0,
+  })
+  penaltyAmount!: string;
+
   @Column({ name: 'payment_method', type: 'enum', enum: PaymentMethod })
   paymentMethod!: PaymentMethod;
 
-  @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
+  @Column({
+    type: 'enum',
+    enum: PaymentStatus,
+    default: PaymentStatus.PENDING,
+  })
   status!: PaymentStatus;
+
+  @Column({
+    name: 'appointment_type',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+  })
+  appointmentType!: string | null;
 
   @Column({ name: 'refund_amount', type: 'decimal', precision: 15, scale: 2, default: 0 })
   refundAmount!: string;
@@ -45,13 +66,25 @@ export class Payment extends BaseEntity {
 
   @Expose({ name: 'human_readable_status' })
   get humanReadableStatus(): string {
+
     const statusMap: Record<PaymentStatus, string> = {
-      [PaymentStatus.SUCCESS]: 'Success',
-      [PaymentStatus.FAILED]: 'Failed',
+
       [PaymentStatus.PENDING]: 'Pending',
+
+      [PaymentStatus.HELD]: 'Held',
+
+      [PaymentStatus.COMPLETED]: 'Completed',
+
       [PaymentStatus.REFUNDED]: 'Refunded',
+
+      [PaymentStatus.PARTIAL_REFUNDED]: 'Partial Refunded',
+
+      [PaymentStatus.FORFEITED]: 'Forfeited',
+
+      [PaymentStatus.FAILED]: 'Failed',
     };
-    return statusMap[this.status] || 'Unknown';
+
+    return statusMap[this.status];
   }
 
   @Expose({ name: 'net_paid_amount' })
@@ -61,7 +94,7 @@ export class Payment extends BaseEntity {
     return (amountVal - refundVal).toFixed(2);
   }
 
-  
+
   @OneToOne(() => Appointment, (appointment) => appointment.payment, { nullable: true })
   @JoinColumn({ name: 'appointment_id' })
   appointment!: Appointment | null;

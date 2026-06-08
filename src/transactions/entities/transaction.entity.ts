@@ -28,10 +28,14 @@ export class Transaction extends BaseEntity {
     @Column({ name: 'payment_method', type: 'enum', enum: TransactionMethod })
     paymentMethod!: TransactionMethod;
 
-    @Index()
-    @Column({ name: 'external_reference', type: 'varchar', length: 255, nullable: true })
-    externalReference!: string | null;
-
+    @Column({
+        name: 'card_last4',
+        type: 'varchar',
+        length: 4,
+        nullable: true,
+    })
+    cardLast4!: string | null;
+    
     @ManyToOne(() => User, (user) => user.transactions)
     @JoinColumn({ name: 'user_id' })
     user!: User;

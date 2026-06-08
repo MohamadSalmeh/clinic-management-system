@@ -31,15 +31,8 @@ export class Appointment extends BaseEntity {
   @Column({ type: 'enum', enum: ['1', '2'] })
   priority!: string;
 
-  @Column({ type: 'enum', enum: ['pending','confirmed', 'cancelled', 'completed', 'no_show'] })
+  @Column({ type: 'enum', enum: ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'] })
   status!: string;
-
-  @Column({
-    name: 'payment_status',
-    type: 'enum',
-    enum: ['paid', 'unpaid', 'partial', 'refunded'],
-  })
-  paymentStatus!: string;
 
   @Column({ name: 'requested_date', type: 'date' })
   requestedDate!: Date;

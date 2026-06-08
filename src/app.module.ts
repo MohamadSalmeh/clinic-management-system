@@ -26,6 +26,7 @@ import { PrescribedMedicinesModule } from './prescribed-medicines/prescribed-med
 import { QueuesModule } from './queues/queues.module';
 import { AdminsModule } from './admins/admins.module';
 import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
+import { SystemSettingsModule } from './system-setting/system-settings.module';
 
 @Module({
   imports: [
@@ -39,25 +40,25 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
-       return {
+        return {
           type: 'postgres',
           database: config.get<string>('DB_DB'),
           username: config.get<string>('DB_USERNAME'),
           password: config.get<string>('DB_PASSWORD'),
           host: config.get<string>('DB_HOST'),
-       
+
           port: config.get<number>('DB_PORT'),
-        //  dropSchema: true,
-        //   autoLoadEntities: true,
+          //  dropSchema: true,
+          //   autoLoadEntities: true,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: process.env.NODE_ENV !== 'production', // Synchronize only in non-production environments
-        // 
-       // 
-       
+          // 
+          // 
+
         };
       },
     }),
-
+    SystemSettingsModule,
     UsersModule,
     AuthModule,
     AppointmentsModule,
@@ -82,6 +83,7 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
     TransactionsModule,
     DoctorLeavesModule,
     
+
   ],
   controllers: [],
   providers: [AppService],

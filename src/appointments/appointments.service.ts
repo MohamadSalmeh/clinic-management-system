@@ -98,7 +98,6 @@ export class AppointmentsService {
                 type: dto.type,
                 priority: dto.priority,
                 status: 'pending',
-                paymentStatus: 'unpaid',
                 actualStartTime: null,
                 actualEndTime: null,
                 reasonForVisit: dto.reasonForVisit ?? null,
@@ -209,12 +208,6 @@ export class AppointmentsService {
 
         if (query.status) {
             qb.andWhere('appointment.status = :status', { status: query.status });
-        }
-
-        if (query.paymentStatus) {
-            qb.andWhere('appointment.paymentStatus = :paymentStatus', {
-                paymentStatus: query.paymentStatus,
-            });
         }
 
         if (query.from) {

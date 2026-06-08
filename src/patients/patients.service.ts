@@ -23,9 +23,9 @@ export type PatientProfileCompletionStatus = {
 };
 
 export type PatientWalletSummary = {
-  balance: string;
-  frozenBalance: string;
+  totalBalance: string;
   availableBalance: string;
+  frozenBalance: string;
 };
 
 const APPOINTMENT_STATUS_MAP: Record<PatientAppointmentFilter, readonly string[]> = {
@@ -47,7 +47,7 @@ export class PatientsService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
-  ) {}
+  ) { }
 
   async createProfile(userId: number, createDto: CreatePatientProfileDto): Promise<PatientProfile> {
     const existingProfile = await this.patientProfileRepository.findOne({
@@ -122,9 +122,9 @@ export class PatientsService {
     return this.getProfile(userId);
   }
 
-  
 
-  
+
+
 
   async getWallet(userId: number): Promise<PatientWalletSummary | null> {
     const patientProfile = await this.patientProfileRepository.findOne({
@@ -142,10 +142,11 @@ export class PatientsService {
     }
 
     return {
-      balance: wallet.balance,
-      frozenBalance: wallet.lockedBalance,
+      totalBalance: wallet.totalBalance,
       availableBalance: wallet.availableBalance,
+      frozenBalance: wallet.frozenBalance,
     };
+
   }
 
   async getAppointments(
