@@ -10,9 +10,12 @@ import { Appointment } from './entities/appointment.entity';
 import {
   AdminAppointmentQueryDto,
   AppointmentQueryDto,
+  AvailableDaysDto,
+  CalculateAppointmentTimeDto,
   CancelAppointmentDto,
   CreateAppointmentDto,
   DoctorAppointmentQueryDto,
+  WaitListDto,
   //RescheduleAppointmentDto,
 } from './dto';
 import { PatientProfile } from '../patients/entities/patient-profile.entity';
@@ -57,7 +60,7 @@ export class AppointmentsService {
     private readonly dataSource: DataSource,
     @Inject(forwardRef(() => QueuesService))
     private readonly queuesService: QueuesService,
-  ) {}
+  ) { }
 
   async createAppointment(
     userId: number,
@@ -809,4 +812,174 @@ export class AppointmentsService {
   private getUserRole(currentUser: ActiveUserData): UserRole {
     return currentUser.usertype.toLowerCase() as UserRole;
   }
+  //
+  async calculateNextAvailableTime(dto: CalculateAppointmentTimeDto) {
+
+    const schedule = await this.doctorScheduleRepository.findOne({
+      where: {
+        id: dto.scheduleId,
+        doctorProfileId: dto.doctorId,
+        clinicId: dto.clinicId,
+        isActive: true,
+      },
+    });
+
+    if (!schedule) {
+      throw new BadRequestException('Schedule not found');
+    }
+
+    const duration =
+      dto.type === 'Initial Visit'
+        ? 30
+        : 20;
+
+    const appointments = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctorId = :doctorId', {
+        doctorId: dto.doctorId,
+      })
+      .andWhere('DATE(appointment.requestedDate)=:date', {
+        date: dto.requestedDate,
+      })
+      .andWhere('appointment.status IN (:...status)', {
+        status: ['pending', 'confirmed'],
+      })
+      .orderBy('appointment.endTime', 'ASC')
+      .getMany();
+
+    let start = schedule.startTime;
+
+    if (appointments.length > 0) {
+
+      const insideSchedule = appointments.filter(a =>
+        a.startTime >= schedule.startTime &&
+        a.endTime <= schedule.endTime,
+      );
+
+      if (insideSchedule.length > 0) {
+
+        start = insideSchedule[insideSchedule.length - 1].endTime;
+      }
+    }
+
+    const end = this.addMinutes(start, duration);
+
+    if (end > schedule.endTime) {
+      throw new BadRequestException(
+        'No available time in this schedule',
+      );
+    }
+
+    return {
+      startTime: start,
+      endTime: end,
+    };
+  }
+  private addMinutes(time: string, minutes: number): string {
+
+    const [h, m, s] = time.split(':').map(Number);
+
+    const date = new Date();
+
+    date.setHours(h);
+    date.setMinutes(m + minutes);
+    date.setSeconds(s || 0);
+
+    return date.toTimeString().slice(0, 8);
+  }
+  async getWaitList(dto: WaitListDto) {
+
+    const appointments = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctorId = :doctorId', {
+        doctorId: dto.doctorId,
+      })
+      .andWhere('appointment.clinicId = :clinicId', {
+        clinicId: dto.clinicId,
+      })
+      .andWhere('DATE(appointment.requestedDate)=:requestedDate', {
+        requestedDate: dto.requestedDate,
+      })
+      .andWhere('appointment.status = :status', {
+        status: 'cancelled',
+      })
+      .orderBy('appointment.startTime', 'ASC')
+      .getMany();
+
+    return appointments.map((appointment) => ({
+      appointmentId: appointment.id,
+      startTime: appointment.startTime,
+      endTime: appointment.endTime,
+    }));
+  }
+  async getAvailableDays(dto: AvailableDaysDto) {
+    const schedules = await this.doctorScheduleRepository.find({
+      where: {
+        doctorProfileId: dto.doctorId,
+        clinicId: dto.clinicId,
+        isActive: true,
+      },
+    });
+
+    if (schedules.length === 0) {
+      return [];
+    }
+
+    const leaves = await this.doctorLeaveRepository.find({
+      where: {
+        doctorProfileId: dto.doctorId,
+      },
+    });
+
+    const result: {
+      date: string;
+      dayOfWeek: number;
+    }[] = [];
+
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+
+    const end = new Date(today);
+    end.setFullYear(end.getFullYear() + 1);
+
+    while (today <= end) {
+
+      const dayOfWeek = today.getDay();
+
+      const hasSchedule = schedules.some(
+        (schedule) =>
+          schedule.type !== DoctorScheduleType.BREAK &&
+          schedule.dayOfWeek === dayOfWeek,
+      );
+
+      if (hasSchedule) {
+
+        const dateString = today.toISOString().slice(0, 10);
+
+        const hasFullDayLeave = leaves.some((leave) => {
+
+          const leaveDate = new Date(leave.exceptionDate);
+          leaveDate.setHours(12, 0, 0, 0);
+
+          return (
+            leaveDate.toISOString().slice(0, 10) === dateString &&
+            leave.startTime === null &&
+            leave.endTime === null
+          );
+        });
+
+        if (!hasFullDayLeave) {
+          result.push({
+            date: dateString,
+            dayOfWeek,
+          });
+        }
+      }
+
+      today.setDate(today.getDate() + 1);
+    }
+
+    return result;
+  }
+  //
 }
