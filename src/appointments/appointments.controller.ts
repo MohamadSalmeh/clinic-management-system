@@ -20,7 +20,8 @@ import {
     CancelAppointmentDto,
     CreateAppointmentDto,
     DoctorAppointmentQueryDto,
-   // RescheduleAppointmentDto,
+    AvailableDaysDto, CalculateAppointmentTimeDto, WaitListDto,
+    // RescheduleAppointmentDto,
 } from './dto';
 import { Appointment } from './entities/appointment.entity';
 
@@ -126,13 +127,36 @@ export class AppointmentsController {
         return this.appointmentsService.markNoShow(id, currentUser);
     }
 
-   /* @Patch(':id/reschedule')
-    @Roles(UserRole.PATIENT, UserRole.DOCTOR)
-    rescheduleAppointment(
-        @Param('id', ParseIntPipe) id: number,
-        @CurrentUser() currentUser: ActiveUserData,
-        @Body() dto: RescheduleAppointmentDto,
-    ): Promise<Appointment> {
-        return this.appointmentsService.rescheduleAppointment(id, currentUser, dto);
-    }*/
+    /* @Patch(':id/reschedule')
+     @Roles(UserRole.PATIENT, UserRole.DOCTOR)
+     rescheduleAppointment(
+         @Param('id', ParseIntPipe) id: number,
+         @CurrentUser() currentUser: ActiveUserData,
+         @Body() dto: RescheduleAppointmentDto,
+     ): Promise<Appointment> {
+         return this.appointmentsService.rescheduleAppointment(id, currentUser, dto);
+     }*/
+
+    @Post('next-time')
+    @Roles(UserRole.PATIENT)
+    calculateNextTime(
+        @Body() dto: CalculateAppointmentTimeDto,
+    ) {
+        return this.appointmentsService.calculateNextAvailableTime(dto);
+    }
+
+    @Post('wait-list')
+    @Roles(UserRole.PATIENT)
+    getWaitList(
+        @Body() dto: WaitListDto,
+    ) {
+        return this.appointmentsService.getWaitList(dto);
+    }
+    @Post('available-days')
+    @Roles(UserRole.PATIENT)
+    getAvailableDays(
+        @Body() dto: AvailableDaysDto,
+    ) {
+        return this.appointmentsService.getAvailableDays(dto);
+    }
 }
