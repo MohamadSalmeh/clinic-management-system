@@ -94,11 +94,13 @@ export class QueuesService {
       const maxPositionResult = await transactionalQueueRepo
         .createQueryBuilder('queue')
         .select('MAX(queue.position)', 'max')
-        .where('queue.doctorId = :doctorId', { doctorId: appointment.doctorId })
-        .andWhere('queue.clinicId = :clinicId', {
+        .where('queue.doctor_id = :doctorId', {
+          doctorId: appointment.doctorId,
+        })
+        .andWhere('queue.clinic_id = :clinicId', {
           clinicId: appointment.clinicId,
         })
-        .andWhere('queue.createdAt BETWEEN :startOfToday AND :endOfToday', {
+        .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
           startOfToday,
           endOfToday,
         })
@@ -109,18 +111,11 @@ export class QueuesService {
           ? Number(maxPositionResult.max) + 1
           : 1;
 
-      const waitingPatientsCount = await transactionalQueueRepo.count({
-        where: {
-          doctorId: appointment.doctorId,
-          clinicId: appointment.clinicId,
-          status: QueueStatus.WAITING,
-        },
-      });
-
       const estimatedWaitMinutes = await this.calculateEstimatedWaitMinutes(
         appointment.clinicId,
         appointment.doctorId,
       );
+
       const isPriority = appointment.priority === '2';
 
       const queueEntry = transactionalQueueRepo.create({
@@ -159,18 +154,17 @@ export class QueuesService {
       .leftJoinAndSelect('appointment.patient', 'patient')
       .leftJoinAndSelect('patient.user', 'patientUser')
       .leftJoinAndSelect('queue.clinic', 'clinic')
-      .where('queue.doctorId = :doctorId', { doctorId: doctorProfile.id })
+      .where('queue.doctor_id = :doctorId', { doctorId: doctorProfile.id })
       .andWhere('queue.status IN (:...statuses)', {
         statuses: [QueueStatus.WAITING, QueueStatus.IN_PROGRESS],
       })
-      .andWhere('queue.createdAt BETWEEN :startOfToday AND :endOfToday', {
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
         startOfToday,
         endOfToday,
       })
       .orderBy('queue.position', 'ASC')
       .getMany();
   }
-
   async startConsultation(
     queueId: number,
     currentUser: ActiveUserData,
@@ -192,7 +186,7 @@ export class QueuesService {
       throw new NotFoundException('Queue entry not found.');
     }
 
-    if (Number(queue.doctorId) !== doctorProfile.id) {
+    if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
       throw new ForbiddenException(
         'You do not have permission to start this consultation.',
       );
@@ -256,7 +250,7 @@ export class QueuesService {
       throw new NotFoundException('Queue entry not found.');
     }
 
-    if (Number(queue.doctorId) !== doctorProfile.id) {
+    if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
       throw new ForbiddenException(
         'You do not have permission to complete this consultation.',
       );
@@ -300,7 +294,7 @@ export class QueuesService {
       .leftJoinAndSelect('appointment.patient', 'patient')
       .leftJoinAndSelect('patient.user', 'patientUser')
       .leftJoinAndSelect('queue.clinic', 'clinic')
-      .where('queue.createdAt BETWEEN :startOfToday AND :endOfToday', {
+      .where('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
         startOfToday,
         endOfToday,
       });
@@ -366,7 +360,7 @@ export class QueuesService {
         .where('doctorId = :doctorId', { doctorId: queue.doctorId })
         .andWhere('clinicId = :clinicId', { clinicId: queue.clinicId })
         .andWhere('position >= :newPosition', { newPosition })
-        .andWhere('createdAt BETWEEN :startOfToday AND :endOfToday', {
+        .andWhere('created_at BETWEEN :startOfToday AND :endOfToday', {
           startOfToday,
           endOfToday,
         })
@@ -415,7 +409,7 @@ export class QueuesService {
       .andWhere('queue.clinicId = :clinicId', { clinicId: queue.clinicId })
       .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
       .andWhere('queue.position < :position', { position: queue.position })
-      .andWhere('queue.createdAt BETWEEN :startOfToday AND :endOfToday', {
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
         startOfToday,
         endOfToday,
       })
@@ -446,7 +440,7 @@ export class QueuesService {
       .where('queue.clinicId = :clinicId', { clinicId })
       .andWhere('queue.doctorId = :doctorId', { doctorId })
       .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
-      .andWhere('queue.createdAt BETWEEN :startOfToday AND :endOfToday', {
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
         startOfToday,
         endOfToday,
       })

@@ -311,7 +311,7 @@ export class DoctorSchedulesService {
     }
   }
 
-  private async ensureNoAppointmentConflicts(
+ private async ensureNoAppointmentConflicts(
     doctorProfileId: number,
     dayOfWeek: number,
     isActive: boolean,
@@ -329,7 +329,8 @@ export class DoctorSchedulesService {
         return false;
       }
 
-      return appointment.requestedDate.getDay() === dayOfWeek;
+      const appointmentDate = new Date(appointment.requestedDate);
+      return appointmentDate.getDay() === dayOfWeek;
     });
 
     if (dayAppointments.length === 0) {
