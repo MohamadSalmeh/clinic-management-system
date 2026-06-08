@@ -57,14 +57,27 @@ export class QueuesService {
       );
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const appointmentDateStr = new Date(appointment.requestedDate)
-      .toISOString()
-      .slice(0, 10);
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    
+    // تحويل تاريخ الموعد الفعلي إلى كائن Date للمقارنة الزمنيّة الدقيقة
+    const appointmentTime = new Date(appointment.requestedDate);
+    const appointmentDateStr = appointmentTime.toISOString().slice(0, 10);
 
+    // 1. التأكد أولاً من أن الموعد في نفس اليوم
     if (todayStr !== appointmentDateStr) {
       throw new BadRequestException(
         'Check-in can only be performed on the actual date of the appointment.',
+      );
+    }
+
+    // 2. التعديل الجديد: منع الـ Check-in المبكر جداً (أكثر من ساعة قبل الموعد)
+    const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+    const allowedCheckinStartTime = new Date(appointmentTime.getTime() - ONE_HOUR_IN_MS);
+
+    if (now < allowedCheckinStartTime) {
+      throw new BadRequestException(
+        'لا يمكن تفعيل الدور حالياً. يُسمح بعمل Check-in فقط قبل موعد الحجز الفعلي بساعة واحدة كحد أقصى.',
       );
     }
 
@@ -91,6 +104,7 @@ export class QueuesService {
       const endOfToday = new Date();
       endOfToday.setHours(23, 59, 59, 999);
 
+      // مراعاة الـ snake_case لأسماء الأعمدة في قاعدة البيانات لمنع الكراش
       const maxPositionResult = await transactionalQueueRepo
         .createQueryBuilder('queue')
         .select('MAX(queue.position)', 'max')
@@ -106,6 +120,7 @@ export class QueuesService {
         })
         .getRawOne();
 
+      // التحويل الآمن لنوع البيانات لضمان عدم حدوث مشاكل TypeScript
       const nextPosition =
         maxPositionResult && maxPositionResult.max
           ? Number(maxPositionResult.max) + 1
@@ -229,10 +244,62 @@ export class QueuesService {
     });
   }
 
+async callNextPatient(doctorId: number, clinicId: number): Promise<Queue> {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    // أ. التأكد من عدم وجود مريض قيد المعاينة حالياً لنفس الدكتور والعيادة
+    const activeSession = await this.queueRepository
+      .createQueryBuilder('queue')
+      .where('queue.doctor_id = :doctorId', { doctorId })
+      .andWhere('queue.clinic_id = :clinicId', { clinicId })
+      .andWhere('queue.status = :status', { status: 'in_progress' })
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', { startOfToday, endOfToday })
+      .getOne();
+
+    if (activeSession) {
+      throw new BadRequestException(
+        'لديك مريض داخل غرفة المعاينة حالياً، يرجى إنهاء الجلسة الحالية أولاً.',
+      );
+    }
+
+    // ب. جلب أول مريض في الانتظار (صاحب أقل رقم دور اليوم)
+    const nextQueueEntry = await this.queueRepository
+      .createQueryBuilder('queue')
+      .where('queue.doctor_id = :doctorId', { doctorId })
+      .andWhere('queue.clinic_id = :clinicId', { clinicId })
+      .andWhere('queue.status = :status', { status: 'waiting' })
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', { startOfToday, endOfToday })
+      .orderBy('queue.position', 'ASC')
+      .getOne();
+
+    if (!nextQueueEntry) {
+      throw new NotFoundException('لا يوجد مرضى في قائمة الانتظار لهذا اليوم.');
+    }
+
+    // ج. تحديث حالة الطابور إلى قيد المعاينة وتسجيل وقت البدء
+    nextQueueEntry.status = QueueStatus.IN_PROGRESS;
+    nextQueueEntry.startedTime = new Date(); // أو started_time حسب الـ entity mapping
+    const savedQueue = await this.queueRepository.save(nextQueueEntry);
+
+    // د. تحديث حالة الموعد المرتبط تلقائياً ليكون متناسقاً
+    if (nextQueueEntry.appointmentId) {
+      await this.appointmentRepository.update(nextQueueEntry.appointmentId, {
+        status: QueueStatus.IN_PROGRESS,
+        actualStartTime: new Date(),
+      });
+    }
+
+    return savedQueue;
+  }
+
   async completeConsultation(
     queueId: number,
     currentUser: ActiveUserData,
   ): Promise<Queue> {
+    // 1. جلب بروفايل الطبيب للأمان والتحقق من الصلاحيات
     const doctorProfile = await this.doctorRepository.findOne({
       where: { userId: currentUser.sub },
     });
@@ -241,6 +308,7 @@ export class QueuesService {
       throw new NotFoundException('Doctor profile not found.');
     }
 
+    // 2. جلب سجل الطابور مع الموعد المرتبط به بناءً على الـ queueId
     const queue = await this.queueRepository.findOne({
       where: { id: queueId },
       relations: { appointment: true },
@@ -250,30 +318,41 @@ export class QueuesService {
       throw new NotFoundException('Queue entry not found.');
     }
 
+    // 3. التحقق من أن الطبيب الحالي هو نفسه المسؤول عن هذا المريض
     if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
       throw new ForbiddenException(
         'You do not have permission to complete this consultation.',
       );
     }
 
+    // 4. التأكد من أن المريض حالته حالياً قيد المعاينة (In Progress)
     if (queue.status !== QueueStatus.IN_PROGRESS) {
       throw new BadRequestException(
         'Consultation can only be completed if it is currently in progress.',
       );
     }
 
+    // 5. حساب المدة المستغرقة بالدقائق ومعالجة الـ null في التواريخ بدقة
+    const currentTime = new Date();
+    const startTime = queue.startedTime ? new Date(queue.startedTime) : currentTime;
+    const durationMinutes = Math.round((currentTime.getTime() - startTime.getTime()) / 60000);
+
+    // 6. حفظ التعديلات داخل Transaction آمن لضمان سلامة البيانات
     return await this.dataSource.transaction(async (manager) => {
       const transactionalQueueRepo = manager.getRepository(Queue);
       const transactionalAppointmentRepo = manager.getRepository(Appointment);
 
-      const currentTime = new Date();
-
+      // تحديث بيانات الطابور
       queue.status = QueueStatus.COMPLETED;
       queue.finishedTime = currentTime;
+      
+      // حل مشكلة الـ readonly عبر عمل Type Casting (queue as any) للإسناد المؤقت بـ TypeScript
+      (queue as any).consultationDurationMinutes = durationMinutes;
 
+      // تحديث الموعد المرتبط تلقائياً ليكون متناسقاً مع الطابور
       if (queue.appointment) {
         queue.appointment.actualEndTime = currentTime;
-        queue.appointment.status = 'completed';
+        queue.appointment.status = QueueStatus.COMPLETED; 
         await transactionalAppointmentRepo.save(queue.appointment);
       }
 
