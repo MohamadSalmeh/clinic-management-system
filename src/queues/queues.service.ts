@@ -1,0 +1,451 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
+import { DataSource, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Queue } from './entities/queue.entity';
+import { Appointment } from '../appointments/entities/appointment.entity';
+import { Clinic } from '../clinics/entities/clinic.entity';
+import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
+import { QueueQueryDto } from './dto/queue-query.dto';
+import { AppointmentsService } from '../appointments/appointments.service';
+import { ActiveUserData } from '../utils';
+import { QueueStatus } from './enums/queue-status.enum';
+
+@Injectable()
+export class QueuesService {
+  constructor(
+    @InjectRepository(Queue)
+    private readonly queueRepository: Repository<Queue>,
+
+    @InjectRepository(Appointment)
+    private readonly appointmentRepository: Repository<Appointment>,
+
+    @InjectRepository(Clinic)
+    private readonly clinicRepository: Repository<Clinic>,
+
+    @InjectRepository(DoctorProfile)
+    private readonly doctorRepository: Repository<DoctorProfile>,
+
+    @Inject(forwardRef(() => AppointmentsService))
+    private readonly appointmentsService: AppointmentsService,
+
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async createQueueEntry(
+    appointmentId: number,
+    currentUser: ActiveUserData,
+  ): Promise<Queue> {
+    const appointment = await this.appointmentRepository.findOne({
+      where: { id: appointmentId },
+      relations: { patient: true, doctor: true, clinic: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('The specified appointment does not exist.');
+    }
+
+    if (appointment.status !== 'confirmed') {
+      throw new BadRequestException(
+        `Cannot check-in patient. Appointment status is currently ${appointment.status}, but must be confirmed.`,
+      );
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const appointmentDateStr = new Date(appointment.requestedDate)
+      .toISOString()
+      .slice(0, 10);
+
+    if (todayStr !== appointmentDateStr) {
+      throw new BadRequestException(
+        'Check-in can only be performed on the actual date of the appointment.',
+      );
+    }
+
+    const existingQueue = await this.queueRepository.findOne({
+      where: { appointmentId },
+    });
+
+    if (existingQueue) {
+      throw new BadRequestException(
+        'This appointment has already been checked into the queue.',
+      );
+    }
+
+    return await this.dataSource.transaction(async (manager) => {
+      const transactionalQueueRepo = manager.getRepository(Queue);
+      const transactionalAppointmentRepo = manager.getRepository(Appointment);
+
+      appointment.checkinTime = new Date();
+      await transactionalAppointmentRepo.save(appointment);
+
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+
+      const maxPositionResult = await transactionalQueueRepo
+        .createQueryBuilder('queue')
+        .select('MAX(queue.position)', 'max')
+        .where('queue.doctor_id = :doctorId', {
+          doctorId: appointment.doctorId,
+        })
+        .andWhere('queue.clinic_id = :clinicId', {
+          clinicId: appointment.clinicId,
+        })
+        .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
+          startOfToday,
+          endOfToday,
+        })
+        .getRawOne();
+
+      const nextPosition =
+        maxPositionResult && maxPositionResult.max
+          ? Number(maxPositionResult.max) + 1
+          : 1;
+
+      const estimatedWaitMinutes = await this.calculateEstimatedWaitMinutes(
+        appointment.clinicId,
+        appointment.doctorId,
+      );
+
+      const isPriority = appointment.priority === '2';
+
+      const queueEntry = transactionalQueueRepo.create({
+        appointmentId: appointment.id,
+        clinicId: appointment.clinicId,
+        doctorId: appointment.doctorId,
+        position: nextPosition,
+        status: QueueStatus.WAITING,
+        estimatedWaitMinutes,
+        checkinTime: new Date(),
+        isPriority,
+      });
+
+      return await transactionalQueueRepo.save(queueEntry);
+    });
+  }
+
+  async getDoctorLiveQueue(doctorUserId: number): Promise<Queue[]> {
+    const doctorProfile = await this.doctorRepository.findOne({
+      where: { userId: doctorUserId },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found.');
+    }
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    return await this.queueRepository
+      .createQueryBuilder('queue')
+      .leftJoinAndSelect('queue.appointment', 'appointment')
+      .leftJoinAndSelect('appointment.patient', 'patient')
+      .leftJoinAndSelect('patient.user', 'patientUser')
+      .leftJoinAndSelect('queue.clinic', 'clinic')
+      .where('queue.doctor_id = :doctorId', { doctorId: doctorProfile.id })
+      .andWhere('queue.status IN (:...statuses)', {
+        statuses: [QueueStatus.WAITING, QueueStatus.IN_PROGRESS],
+      })
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
+        startOfToday,
+        endOfToday,
+      })
+      .orderBy('queue.position', 'ASC')
+      .getMany();
+  }
+  async startConsultation(
+    queueId: number,
+    currentUser: ActiveUserData,
+  ): Promise<Queue> {
+    const doctorProfile = await this.doctorRepository.findOne({
+      where: { userId: currentUser.sub },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found.');
+    }
+
+    const queue = await this.queueRepository.findOne({
+      where: { id: queueId },
+      relations: { appointment: true },
+    });
+
+    if (!queue) {
+      throw new NotFoundException('Queue entry not found.');
+    }
+
+    if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
+      throw new ForbiddenException(
+        'You do not have permission to start this consultation.',
+      );
+    }
+
+    if (queue.status !== QueueStatus.WAITING) {
+      throw new BadRequestException(
+        'Consultation can only be started for patients in WAITING status.',
+      );
+    }
+
+    const activeConsultation = await this.queueRepository.findOne({
+      where: {
+        doctorId: doctorProfile.id,
+        status: QueueStatus.IN_PROGRESS,
+      },
+    });
+
+    if (activeConsultation) {
+      throw new BadRequestException(
+        'You already have an active consultation. Please complete or skip it first.',
+      );
+    }
+
+    return await this.dataSource.transaction(async (manager) => {
+      const transactionalQueueRepo = manager.getRepository(Queue);
+      const transactionalAppointmentRepo = manager.getRepository(Appointment);
+
+      const currentTime = new Date();
+
+      queue.status = QueueStatus.IN_PROGRESS;
+      queue.startedTime = currentTime;
+
+      if (queue.appointment) {
+        queue.appointment.actualStartTime = currentTime;
+        await transactionalAppointmentRepo.save(queue.appointment);
+      }
+
+      return await transactionalQueueRepo.save(queue);
+    });
+  }
+
+  async completeConsultation(
+    queueId: number,
+    currentUser: ActiveUserData,
+  ): Promise<Queue> {
+    const doctorProfile = await this.doctorRepository.findOne({
+      where: { userId: currentUser.sub },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found.');
+    }
+
+    const queue = await this.queueRepository.findOne({
+      where: { id: queueId },
+      relations: { appointment: true },
+    });
+
+    if (!queue) {
+      throw new NotFoundException('Queue entry not found.');
+    }
+
+    if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
+      throw new ForbiddenException(
+        'You do not have permission to complete this consultation.',
+      );
+    }
+
+    if (queue.status !== QueueStatus.IN_PROGRESS) {
+      throw new BadRequestException(
+        'Consultation can only be completed if it is currently in progress.',
+      );
+    }
+
+    return await this.dataSource.transaction(async (manager) => {
+      const transactionalQueueRepo = manager.getRepository(Queue);
+      const transactionalAppointmentRepo = manager.getRepository(Appointment);
+
+      const currentTime = new Date();
+
+      queue.status = QueueStatus.COMPLETED;
+      queue.finishedTime = currentTime;
+
+      if (queue.appointment) {
+        queue.appointment.actualEndTime = currentTime;
+        queue.appointment.status = 'completed';
+        await transactionalAppointmentRepo.save(queue.appointment);
+      }
+
+      return await transactionalQueueRepo.save(queue);
+    });
+  }
+
+  async getLiveQueueForAdmin(query: QueueQueryDto): Promise<Queue[]> {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const qb = this.queueRepository
+      .createQueryBuilder('queue')
+      .leftJoinAndSelect('queue.appointment', 'appointment')
+      .leftJoinAndSelect('appointment.patient', 'patient')
+      .leftJoinAndSelect('patient.user', 'patientUser')
+      .leftJoinAndSelect('queue.clinic', 'clinic')
+      .where('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
+        startOfToday,
+        endOfToday,
+      });
+
+    if (query.clinicId) {
+      qb.andWhere('queue.clinicId = :clinicId', { clinicId: query.clinicId });
+    }
+
+    if (query.doctorId) {
+      qb.andWhere('queue.doctorId = :doctorId', { doctorId: query.doctorId });
+    }
+
+    return await qb.orderBy('queue.position', 'ASC').getMany();
+  }
+
+  async skipPatient(
+    queueId: number,
+    currentUser: ActiveUserData,
+  ): Promise<Queue> {
+    const queue = await this.queueRepository.findOne({
+      where: { id: queueId },
+    });
+
+    if (!queue) {
+      throw new NotFoundException('Queue entry not found.');
+    }
+
+    if (
+      queue.status !== QueueStatus.WAITING &&
+      queue.status !== QueueStatus.IN_PROGRESS
+    ) {
+      throw new BadRequestException(
+        'Cannot skip a patient who is not currently waiting or in progress.',
+      );
+    }
+
+    queue.status = QueueStatus.SKIPPED;
+    return await this.queueRepository.save(queue);
+  }
+
+  async reorderQueue(queueId: number, newPosition: number): Promise<Queue> {
+    const queue = await this.queueRepository.findOne({
+      where: { id: queueId },
+    });
+
+    if (!queue) {
+      throw new NotFoundException('Queue entry not found.');
+    }
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    return await this.dataSource.transaction(async (manager) => {
+      const transactionalQueueRepo = manager.getRepository(Queue);
+
+      await transactionalQueueRepo
+        .createQueryBuilder('queue')
+        .update(Queue)
+        .set({ position: () => 'position + 1' })
+        .where('doctorId = :doctorId', { doctorId: queue.doctorId })
+        .andWhere('clinicId = :clinicId', { clinicId: queue.clinicId })
+        .andWhere('position >= :newPosition', { newPosition })
+        .andWhere('created_at BETWEEN :startOfToday AND :endOfToday', {
+          startOfToday,
+          endOfToday,
+        })
+        .execute();
+
+      queue.position = newPosition;
+      return await transactionalQueueRepo.save(queue);
+    });
+  }
+
+  async getPatientLiveStatus(
+    appointmentId: number,
+    currentUser: ActiveUserData,
+  ): Promise<any> {
+    const queue = await this.queueRepository.findOne({
+      where: { appointmentId },
+    });
+
+    if (!queue) {
+      throw new NotFoundException(
+        'The patient has not checked in for this appointment yet.',
+      );
+    }
+
+    if (
+      queue.status === QueueStatus.COMPLETED ||
+      queue.status === QueueStatus.SKIPPED
+    ) {
+      return {
+        status: queue.status,
+        currentPosition: queue.position,
+        patientsAhead: 0,
+        estimatedWaitMinutes: 0,
+      };
+    }
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const patientsAhead = await this.queueRepository
+      .createQueryBuilder('queue')
+      .where('queue.doctorId = :doctorId', { doctorId: queue.doctorId })
+      .andWhere('queue.clinicId = :clinicId', { clinicId: queue.clinicId })
+      .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
+      .andWhere('queue.position < :position', { position: queue.position })
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
+        startOfToday,
+        endOfToday,
+      })
+      .getCount();
+
+    const estimatedWaitMinutes = patientsAhead * 15;
+
+    return {
+      status: queue.status,
+      currentPosition: queue.position,
+      patientsAhead,
+      estimatedWaitMinutes,
+    };
+  }
+
+  private async calculateEstimatedWaitMinutes(
+    clinicId: number,
+    doctorId: number,
+  ): Promise<number> {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const waitingPatientsCount = await this.queueRepository
+      .createQueryBuilder('queue')
+      .where('queue.clinicId = :clinicId', { clinicId })
+      .andWhere('queue.doctorId = :doctorId', { doctorId })
+      .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
+      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
+        startOfToday,
+        endOfToday,
+      })
+      .getCount();
+
+    return waitingPatientsCount * 15;
+  }
+}

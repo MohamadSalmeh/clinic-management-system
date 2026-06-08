@@ -1,8 +1,8 @@
 import {
-    BadRequestException,
-    ForbiddenException,
-    Injectable,
-    NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Raw, Repository, SelectQueryBuilder } from 'typeorm';
@@ -22,19 +22,21 @@ import { PatientProfile } from '../patients/entities/patient-profile.entity';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { Clinic } from '../clinics/entities/clinic.entity';
 import {
-    DoctorSchedule,
-    DoctorScheduleType,
+  DoctorSchedule,
+  DoctorScheduleType,
 } from '../doctor-schedules/entities/doctor-schedule.entity';
 import { DoctorLeave } from '../doctor-leaves/entities/doctor-leaves.entity';
 import { DoctorClinic } from '../doctor-clinics/entities/doctor-clinic.entity';
 import { MedicalProfilesService } from '../medical-profiles/medical-profiles.service';
 import { ActiveUserData, UserRole } from '../utils';
+import { forwardRef, Inject } from '@nestjs/common';
+import { QueuesService } from '../queues/queues.service';
 
 export type AppointmentGroupedResponse = {
-    upcoming: Appointment[];
-    completed: Appointment[];
-    cancelled: Appointment[];
-    noShow: Appointment[];
+  upcoming: Appointment[];
+  completed: Appointment[];
+  cancelled: Appointment[];
+  noShow: Appointment[];
 };
 
 @Injectable()
@@ -221,63 +223,55 @@ export class AppointmentsService {
         return qb.orderBy('appointment.requestedDate', 'DESC').addOrderBy('appointment.startTime', 'DESC').getMany();
     }
 
-    async cancelAppointment(
-        id: number,
-        currentUser: ActiveUserData,
-        dto: CancelAppointmentDto,
-    ): Promise<Appointment> {
-        const appointment = await this.getAppointmentWithRelations(id);
-        await this.ensureAppointmentAccessForCancellation(appointment, currentUser);
-
-        if (appointment.status === 'completed') {
-            throw new BadRequestException('Completed appointments cannot be cancelled');
-        }
-
-        if (appointment.status === 'no_show') {
-            throw new BadRequestException('No-show appointments cannot be cancelled');
-        }
-
-        appointment.status = 'cancelled';
-        appointment.cancelledAt = new Date();
-        appointment.cancellationReason = dto.cancellationReason ?? null;
-
-        return this.appointmentRepository.save(appointment);
+    if (appointment.status === 'no_show') {
+      throw new BadRequestException('No-show appointments cannot be cancelled');
     }
 
-    async completeAppointment(id: number, currentUser: ActiveUserData): Promise<Appointment> {
-        const appointment = await this.getAppointmentWithRelations(id);
-        this.ensureDoctorOwnership(appointment, currentUser);
+    appointment.status = 'cancelled';
+    appointment.cancelledAt = new Date();
+    appointment.cancellationReason = dto.cancellationReason ?? null;
 
-        if (appointment.status === 'completed') {
-            return appointment;
-        }
+    return this.appointmentRepository.save(appointment);
+  }
 
-        appointment.status = 'completed';
-        appointment.actualEndTime = new Date();
+  async checkInAppointment(
+    id: number,
+    currentUser: ActiveUserData,
+  ): Promise<any> {
+    return this.queuesService.createQueueEntry(id, currentUser);
+  }
 
-        return this.appointmentRepository.save(appointment);
+  async completeAppointment(
+    id: number,
+    currentUser: ActiveUserData,
+  ): Promise<any> {
+    const appointment = await this.getAppointmentWithRelations(id);
+    this.ensureDoctorOwnership(appointment, currentUser);
+
+    if (!appointment.queue) {
+      throw new BadRequestException(
+        'This appointment does not have an active queue record.',
+      );
     }
 
-    async checkInAppointment(id: number, currentUser: ActiveUserData): Promise<Appointment> {
-        const appointment = await this.getAppointmentWithRelations(id);
-        this.ensureDoctorOwnership(appointment, currentUser);
+    return this.queuesService.completeConsultation(
+      appointment.queue.id,
+      currentUser,
+    );
+  }
+  async markNoShow(
+    id: number,
+    currentUser: ActiveUserData,
+  ): Promise<Appointment> {
+    const appointment = await this.getAppointmentWithRelations(id);
+    this.ensureDoctorOwnership(appointment, currentUser);
 
-        appointment.checkinTime = new Date();
-        appointment.actualStartTime = new Date();
+    appointment.status = 'no_show';
 
-        return this.appointmentRepository.save(appointment);
-    }
+    return this.appointmentRepository.save(appointment);
+  }
 
-    async markNoShow(id: number, currentUser: ActiveUserData): Promise<Appointment> {
-        const appointment = await this.getAppointmentWithRelations(id);
-        this.ensureDoctorOwnership(appointment, currentUser);
-
-        appointment.status = 'no_show';
-
-        return this.appointmentRepository.save(appointment);
-    }
-
-    /*async rescheduleAppointment(
+  /*async rescheduleAppointment(
         id: number,
         currentUser: ActiveUserData,
         dto: RescheduleAppointmentDto,
@@ -317,197 +311,277 @@ export class AppointmentsService {
         return this.appointmentRepository.save(appointment);
     }
 */
-    private async ensurePatientMedicalProfileComplete(userId: number): Promise<void> {
-        try {
-            const completion = await this.medicalProfilesService.getCompletionStatus(userId);
+  private async ensurePatientMedicalProfileComplete(
+    userId: number,
+  ): Promise<void> {
+    try {
+      const completion =
+        await this.medicalProfilesService.getCompletionStatus(userId);
 
-            if (!completion.completed) {
-                throw new BadRequestException('Medical profile must be complete before creating an appointment');
-            }
-        } catch (error) {
-            if (error instanceof NotFoundException) {
-                throw new BadRequestException('Medical profile must be complete before creating an appointment');
-            }
-
-            throw error;
-        }
-    }
-
-    private async getPatientProfileByUserId(userId: number): Promise<PatientProfile> {
-        const patientProfile = await this.patientProfileRepository.findOne({
-            where: { userId },
-            relations: { user: true },
-        });
-
-        if (!patientProfile) {
-            throw new NotFoundException('Patient profile not found');
-        }
-
-        return patientProfile;
-    }
-
-    private async getDoctorProfileByUserId(userId: number): Promise<DoctorProfile> {
-        const doctorProfile = await this.doctorProfileRepository.findOne({
-            where: { userId },
-            relations: { user: true },
-        });
-
-        if (!doctorProfile) {
-            throw new NotFoundException('Doctor profile not found');
-        }
-
-        return doctorProfile;
-    }
-
-    private async getDoctorProfileById(id: number): Promise<DoctorProfile> {
-        const doctorProfile = await this.doctorProfileRepository.findOne({
-            where: { id },
-            relations: { user: true },
-        });
-
-        if (!doctorProfile) {
-            throw new NotFoundException('Doctor profile not found');
-        }
-
-        return doctorProfile;
-    }
-
-    private async getClinicById(id: number): Promise<Clinic> {
-        const clinic = await this.clinicRepository.findOne({ where: { id } });
-
-        if (!clinic) {
-            throw new NotFoundException('Clinic not found');
-        }
-
-        return clinic;
-    }
-
-    private async ensureDoctorClinicAssignment(doctorId: number, clinicId: number): Promise<void> {
-        const assignment = await this.doctorClinicRepository.findOne({
-            where: { doctorId, clinicId },
-        });
-
-        if (!assignment) {
-            throw new BadRequestException('Doctor is not assigned to this clinic');
-        }
-    }
-
-    private async ensureAppointmentSlotIsValid(
-        doctorId: number,
-        clinicId: number,
-        requestedDate: string,
-        startTime: string,
-        endTime: string,
-    ): Promise<void> {
-        this.validateTimeRange(startTime, endTime);
-
-        const dayOfWeek = this.getDayOfWeek(requestedDate);
-        console.log(requestedDate);
-        console.log(dayOfWeek);
-        const schedules = await this.doctorScheduleRepository.find({
-            where: {
-                doctorProfileId: doctorId,
-                clinicId,
-                dayOfWeek,
-                isActive: true,
-            },
-        });
-
-        if (schedules.length === 0) {
-            throw new BadRequestException('Doctor has no active schedule in this clinic for the requested day');
-        }
-
-        const workingSchedules = schedules.filter((schedule) => schedule.type !== DoctorScheduleType.BREAK);
-        const breakSchedules = schedules.filter((schedule) => schedule.type === DoctorScheduleType.BREAK);
-        console.log(workingSchedules);
-        console.log(startTime, endTime);
-
-        workingSchedules.forEach((s) => {
-            console.log(
-                s.startTime,
-                s.endTime,
-                this.isTimeInsideRange(
-                    startTime,
-                    endTime,
-                    s.startTime,
-                    s.endTime,
-                ),
-            );
-        });
-        const insideWorkingSchedule = workingSchedules.some((schedule) =>
-            this.isTimeInsideRange(startTime, endTime, schedule.startTime, schedule.endTime),
+      if (!completion.completed) {
+        throw new BadRequestException(
+          'Medical profile must be complete before creating an appointment',
         );
-
-        if (!insideWorkingSchedule) {
-            throw new BadRequestException('Appointment time is outside doctor schedule');
-        }
-
-        const overlapsBreak = breakSchedules.some((schedule) =>
-            this.isOverlap(startTime, endTime, schedule.startTime, schedule.endTime),
+      }
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new BadRequestException(
+          'Medical profile must be complete before creating an appointment',
         );
+      }
 
-        if (overlapsBreak) {
-            throw new BadRequestException('Appointment time overlaps doctor break time');
-        }
+      throw error;
+    }
+  }
 
-        const leaves = await this.doctorLeaveRepository.find({
-            where: {
-                doctorProfileId: doctorId,
-                exceptionDate: Raw((alias) => `DATE(${alias}) = :requestedDate`, {
-                    requestedDate,
-                }),
-            },
-        });
+  private async getPatientProfileByUserId(
+    userId: number,
+  ): Promise<PatientProfile> {
+    const patientProfile = await this.patientProfileRepository.findOne({
+      where: { userId },
+      relations: { user: true },
+    });
 
-        const overlapsLeave = leaves.some((leave) => {
-            if (!leave.startTime || !leave.endTime) {
-                return true;
-            }
-
-            return this.isOverlap(startTime, endTime, leave.startTime, leave.endTime);
-        });
-
-        if (overlapsLeave) {
-            throw new BadRequestException('Doctor has a leave that overlaps the requested time');
-        }
+    if (!patientProfile) {
+      throw new NotFoundException('Patient profile not found');
     }
 
-    private async ensureNoConfirmedAppointmentOverlap(
-        appointmentRepository: Repository<Appointment>,
-        doctorId: number,
-        requestedDate: string,
-        startTime: string,
-        endTime: string,
-        excludeAppointmentId?: number,
-    ): Promise<void> {
-        const qb = appointmentRepository
-            .createQueryBuilder('appointment')
-            .where('appointment.doctorId = :doctorId', { doctorId })
-            .andWhere('DATE(appointment.requestedDate) = :requestedDate', { requestedDate })
-            .andWhere('appointment.status IN (:...statuses)', {
-                statuses: ['pending', 'confirmed'],
-            });
+    return patientProfile;
+  }
 
-        if (excludeAppointmentId !== undefined) {
-            qb.andWhere('appointment.id != :excludeAppointmentId', { excludeAppointmentId });
-        }
-        console.log({
-            doctorId,
-            requestedDate,
-        });
-        console.log(
-            await appointmentRepository.find({
-                where: {
-                    doctorId,
-                },
-            }),
+  private async getDoctorProfileByUserId(
+    userId: number,
+  ): Promise<DoctorProfile> {
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: { userId },
+      relations: { user: true },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    return doctorProfile;
+  }
+
+  private async getDoctorProfileById(id: number): Promise<DoctorProfile> {
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: { id },
+      relations: { user: true },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    return doctorProfile;
+  }
+
+  private async getClinicById(id: number): Promise<Clinic> {
+    const clinic = await this.clinicRepository.findOne({ where: { id } });
+
+    if (!clinic) {
+      throw new NotFoundException('Clinic not found');
+    }
+
+    return clinic;
+  }
+
+  private async ensureDoctorClinicAssignment(
+    doctorId: number,
+    clinicId: number,
+  ): Promise<void> {
+    const assignment = await this.doctorClinicRepository.findOne({
+      where: { doctorId, clinicId },
+    });
+
+    if (!assignment) {
+      throw new BadRequestException('Doctor is not assigned to this clinic');
+    }
+  }
+
+  private async ensureAppointmentSlotIsValid(
+    doctorId: number,
+    clinicId: number,
+    requestedDate: string,
+    startTime: string,
+    endTime: string,
+  ): Promise<void> {
+    this.validateTimeRange(startTime, endTime);
+
+    const dayOfWeek = this.getDayOfWeek(requestedDate);
+    console.log(requestedDate);
+    console.log(dayOfWeek);
+    const schedules = await this.doctorScheduleRepository.find({
+      where: {
+        doctorProfileId: doctorId,
+        clinicId,
+        dayOfWeek,
+        isActive: true,
+      },
+    });
+
+    if (schedules.length === 0) {
+      throw new BadRequestException(
+        'Doctor has no active schedule in this clinic for the requested day',
+      );
+    }
+
+    const workingSchedules = schedules.filter(
+      (schedule) => schedule.type !== DoctorScheduleType.BREAK,
+    );
+    const breakSchedules = schedules.filter(
+      (schedule) => schedule.type === DoctorScheduleType.BREAK,
+    );
+    console.log(workingSchedules);
+    console.log(startTime, endTime);
+
+    workingSchedules.forEach((s) => {
+      console.log(
+        s.startTime,
+        s.endTime,
+        this.isTimeInsideRange(startTime, endTime, s.startTime, s.endTime),
+      );
+    });
+    const insideWorkingSchedule = workingSchedules.some((schedule) =>
+      this.isTimeInsideRange(
+        startTime,
+        endTime,
+        schedule.startTime,
+        schedule.endTime,
+      ),
+    );
+
+    if (!insideWorkingSchedule) {
+      throw new BadRequestException(
+        'Appointment time is outside doctor schedule',
+      );
+    }
+
+    const overlapsBreak = breakSchedules.some((schedule) =>
+      this.isOverlap(startTime, endTime, schedule.startTime, schedule.endTime),
+    );
+
+    if (overlapsBreak) {
+      throw new BadRequestException(
+        'Appointment time overlaps doctor break time',
+      );
+    }
+
+    const leaves = await this.doctorLeaveRepository.find({
+      where: {
+        doctorProfileId: doctorId,
+        exceptionDate: Raw((alias) => `DATE(${alias}) = :requestedDate`, {
+          requestedDate,
+        }),
+      },
+    });
+
+    const overlapsLeave = leaves.some((leave) => {
+      if (!leave.startTime || !leave.endTime) {
+        return true;
+      }
+
+      return this.isOverlap(startTime, endTime, leave.startTime, leave.endTime);
+    });
+
+    if (overlapsLeave) {
+      throw new BadRequestException(
+        'Doctor has a leave that overlaps the requested time',
+      );
+    }
+  }
+
+  private async ensureNoConfirmedAppointmentOverlap(
+    appointmentRepository: Repository<Appointment>,
+    doctorId: number,
+    requestedDate: string,
+    startTime: string,
+    endTime: string,
+    excludeAppointmentId?: number,
+  ): Promise<void> {
+    const qb = appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctorId = :doctorId', { doctorId })
+      .andWhere('DATE(appointment.requestedDate) = :requestedDate', {
+        requestedDate,
+      })
+      .andWhere('appointment.status IN (:...statuses)', {
+        statuses: ['pending', 'confirmed'],
+      });
+
+    if (excludeAppointmentId !== undefined) {
+      qb.andWhere('appointment.id != :excludeAppointmentId', {
+        excludeAppointmentId,
+      });
+    }
+    console.log({
+      doctorId,
+      requestedDate,
+    });
+    console.log(
+      await appointmentRepository.find({
+        where: {
+          doctorId,
+        },
+      }),
+    );
+    const appointments = await qb.getMany();
+    console.log(appointments.length);
+    console.log(appointments);
+    const hasOverlap = appointments.some((appointment) =>
+      this.isOverlap(
+        startTime,
+        endTime,
+        appointment.startTime,
+        appointment.endTime,
+      ),
+    );
+
+    if (hasOverlap) {
+      throw new BadRequestException(
+        'Appointment time overlaps an existing confirmed appointment',
+      );
+    }
+  }
+
+  private async getAppointmentWithRelations(id: number): Promise<Appointment> {
+    const appointment = await this.appointmentRepository.findOne({
+      where: { id },
+      relations: {
+        patient: { user: true },
+        doctor: { user: true },
+        clinic: true,
+        payment: true,
+        rating: true,
+        queue: true,
+        referral: true,
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    return appointment;
+  }
+
+  private async ensureAppointmentAccess(
+    appointment: Appointment,
+    currentUser: ActiveUserData,
+  ): Promise<void> {
+    const role = this.getUserRole(currentUser);
+
+    if (role === UserRole.ADMIN) {
+      return;
+    }
+
+    if (role === UserRole.PATIENT) {
+      if (Number(appointment.patient?.userId) !== currentUser.sub) {
+        throw new ForbiddenException(
+          'You do not have access to this appointment',
         );
-        const appointments = await qb.getMany();
-        console.log(appointments.length);
-        console.log(appointments);
-        const hasOverlap = appointments.some((appointment) =>
-            this.isOverlap(startTime, endTime, appointment.startTime, appointment.endTime),
-        );
+      }
 
         if (hasOverlap) {
             throw new BadRequestException('Appointment time overlaps an existing confirmed appointment');

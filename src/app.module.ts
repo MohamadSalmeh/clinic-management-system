@@ -31,7 +31,7 @@ import { SystemSettingsModule } from './system-setting/system-settings.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, // Make the ConfigModule available globally
+      isGlobal: true,
       envFilePath: process.env.NODE_ENV
         ? `.env.${process.env.NODE_ENV}`
         : '.env',
@@ -88,4 +88,4 @@ import { SystemSettingsModule } from './system-setting/system-settings.module';
   controllers: [],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

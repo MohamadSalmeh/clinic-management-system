@@ -61,15 +61,16 @@ export class Queue extends BaseEntity {
     return this.position === 1 && (this.status === QueueStatus.IN_PROGRESS );
   }
 
-  @Expose({ name: 'queue_label' })
-  get queueLabel(): string {
-    const labels: Record<QueueStatus, string> = {
-      [QueueStatus.WAITING]: 'Waiting',
-      [QueueStatus.IN_PROGRESS]: 'In Progress',
-      [QueueStatus.COMPLETED]: 'Completed',
-    };
-    return labels[this.status] || 'Unspecified';
-  }
+@Expose({ name: 'queue_label' })
+get queueLabel(): string {
+  const labels: Record<QueueStatus, string> = {
+    [QueueStatus.WAITING]: 'Waiting',
+    [QueueStatus.IN_PROGRESS]: 'In Progress',
+    [QueueStatus.COMPLETED]: 'Completed',
+    [QueueStatus.SKIPPED]: 'Skipped',
+  };
+  return labels[this.status] || 'Unspecified';
+}
 
   @Expose({ name: 'consultation_duration_minutes' })
 get consultationDurationMinutes(): number {
