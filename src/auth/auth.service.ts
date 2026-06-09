@@ -36,6 +36,8 @@ import { UserStatus } from '../users/enums/user-status.enum';
 import { MedicalProfilesService } from '../medical-profiles/medical-profiles.service';
 import { OtpService } from './services/otp.service';
 import { MailService } from '../mail/mail.service';
+import { Wallet } from '../wallets/entities/wallet.entity';
+import { WalletStatus } from '../wallets/enums/wallet-status.enum';
 
 type RefreshTokenPayload = Pick<JWTPayloadType, 'sub' | 'version'>;
 type AccountStatus = {
@@ -60,6 +62,8 @@ export class AuthService {
     private readonly medicalProfilesService: MedicalProfilesService,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>
   ) { }
 
   async register(registerDto: RegisterDto): Promise<User> {
@@ -145,7 +149,14 @@ export class AuthService {
     });
 
     const savedUser = await this.userRepository.save(user);
-
+    await this.walletRepository.save(
+      this.walletRepository.create({
+        userId: savedUser.id,
+        availableBalance: '0',
+        frozenBalance: '0',
+        status: WalletStatus.ACTIVE,
+      }),
+    );
     await this.sendVerificationCode(savedUser, code, {
       preferEmail: Boolean(normalizedEmail),
     });
@@ -196,7 +207,7 @@ export class AuthService {
     return { message: 'Reset code sent successfully' };
   }
 
-  
+
 
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
     const normalizedEmail = this.normalizeEmail(dto.email);
@@ -761,13 +772,13 @@ export class AuthService {
       return;
     }
 
-  /*  if (canSendEmail) {
-      await this.mailService.sendVerificationCodeEmail({
-        toEmail: user.email as string,
-        code,
-      });
-      return;
-    }*/
+    /*  if (canSendEmail) {
+        await this.mailService.sendVerificationCodeEmail({
+          toEmail: user.email as string,
+          code,
+        });
+        return;
+      }*/
 
     throw new BadRequestException('User contact information is missing');
   }
