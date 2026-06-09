@@ -24,6 +24,7 @@ import { OtpService } from './services/otp.service';
 import { MailModule } from '../mail/mail.module';
 import { MedicalProfilesModule } from '../medical-profiles/medical-profiles.module';
 import { User } from '../users/entities/user.entity';
+import { Wallet } from '../wallets/entities/wallet.entity';
 
 @Module({
   imports: [
@@ -35,7 +36,7 @@ import { User } from '../users/entities/user.entity';
     forwardRef(() => UsersModule),
     forwardRef(() => MedicalProfilesModule),
     MailModule,
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, Wallet]),
     PassportModule.register({ session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],

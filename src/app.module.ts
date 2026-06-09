@@ -26,6 +26,7 @@ import { PrescribedMedicinesModule } from './prescribed-medicines/prescribed-med
 import { QueuesModule } from './queues/queues.module';
 import { AdminsModule } from './admins/admins.module';
 import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
+import { SystemSettingsModule } from './system-setting/system-settings.module';
 
 @Module({
   imports: [
@@ -51,7 +52,7 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
         };
       },
     }),
-
+    SystemSettingsModule,
     UsersModule,
     AuthModule,
     AppointmentsModule,
@@ -79,4 +80,4 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
   controllers: [],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
