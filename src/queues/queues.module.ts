@@ -8,6 +8,8 @@ import { AuthModule } from '../auth'; // حل مشكلة الـ Guard
 import { Clinic } from '../clinics/entities/clinic.entity';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { Appointment } from '../appointments/entities/appointment.entity';
+import { Payment } from '../payments/entities/payment.entity';
+import { Wallet } from '../wallets/entities/wallet.entity';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { Appointment } from '../appointments/entities/appointment.entity';
       Appointment,
       Clinic,
       DoctorProfile,
+      Wallet,
+      Payment,
     ]),
     AuthModule, // تم إضافته هنا ليوفر الـ JwtService وكل مستلزمات الـ Guards لـ الـ Controller
     forwardRef(() => AppointmentsModule),
@@ -24,4 +28,4 @@ import { Appointment } from '../appointments/entities/appointment.entity';
   providers: [QueuesService],
   exports: [TypeOrmModule, QueuesService],
 })
-export class QueuesModule {}
+export class QueuesModule { }

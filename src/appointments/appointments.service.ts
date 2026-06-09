@@ -31,6 +31,7 @@ import { MedicalProfilesService } from '../medical-profiles/medical-profiles.ser
 import { ActiveUserData, UserRole } from '../utils';
 import { forwardRef, Inject } from '@nestjs/common';
 import { QueuesService } from '../queues/queues.service';
+import { Wallet } from '../wallets/entities/wallet.entity';
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -60,6 +61,8 @@ export class AppointmentsService {
     private readonly dataSource: DataSource,
     @Inject(forwardRef(() => QueuesService))
     private readonly queuesService: QueuesService,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
   ) { }
 
   async createAppointment(
@@ -72,6 +75,30 @@ export class AppointmentsService {
     const doctorProfile = await this.getDoctorProfileById(dto.doctorId);
     const clinic = await this.getClinicById(dto.clinicId);
 
+    let appointmentFee = 0;
+
+    if (dto.type === 'Initial Visit') {
+      appointmentFee = Number(doctorProfile.initialVisitFee ?? 0);
+    } else {
+      appointmentFee = Number(doctorProfile.returnVisitFee ?? 0);
+    }
+
+    const wallet = await this.walletRepository.findOne({
+      where: {
+        userId,
+      },
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Wallet not found');
+    }
+
+    if (Number(wallet.availableBalance) < appointmentFee) {
+      throw new BadRequestException(
+        'Insufficient wallet balance',
+      );
+    }
+
     await this.ensureDoctorClinicAssignment(doctorProfile.id, clinic.id);
     await this.ensureAppointmentSlotIsValid(
       doctorProfile.id,
@@ -80,6 +107,7 @@ export class AppointmentsService {
       dto.startTime,
       dto.endTime,
     );
+
 
     return this.dataSource.transaction(async (manager) => {
       const appointmentRepository = manager.getRepository(Appointment);
@@ -91,6 +119,8 @@ export class AppointmentsService {
         dto.startTime,
         dto.endTime,
       );
+
+
 
       const appointment = appointmentRepository.create({
         patientId: patientProfile.id,
