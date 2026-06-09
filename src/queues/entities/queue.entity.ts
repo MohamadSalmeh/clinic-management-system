@@ -65,6 +65,7 @@ export class Queue extends BaseEntity {
 get queueLabel(): string {
   const labels: Record<QueueStatus, string> = {
     [QueueStatus.WAITING]: 'Waiting',
+      [QueueStatus.CALLING]: 'Calling', // 👈 إضافة التسمية للحالة الجديدة
     [QueueStatus.IN_PROGRESS]: 'In Progress',
     [QueueStatus.COMPLETED]: 'Completed',
     [QueueStatus.SKIPPED]: 'Skipped',
