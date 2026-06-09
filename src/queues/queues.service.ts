@@ -47,7 +47,7 @@ export class QueuesService {
     private readonly paymentRepository: Repository<Payment>,
   ) { }
 
-  async createQueueEntry(
+ async createQueueEntry(
     appointmentId: number,
     currentUser: ActiveUserData,
   ): Promise<Queue> {
@@ -69,18 +69,15 @@ export class QueuesService {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
 
-    // تحويل تاريخ الموعد الفعلي إلى كائن Date للمقارنة الزمنيّة الدقيقة
     const appointmentTime = new Date(appointment.requestedDate);
     const appointmentDateStr = appointmentTime.toISOString().slice(0, 10);
 
-    // 1. التأكد أولاً من أن الموعد في نفس اليوم
     if (todayStr !== appointmentDateStr) {
       throw new BadRequestException(
         'Check-in can only be performed on the actual date of the appointment.',
       );
     }
 
-    // 2. التعديل الجديد: منع الـ Check-in المبكر جداً (أكثر من ساعة قبل الموعد)
     const ONE_HOUR_IN_MS = 60 * 60 * 1000;
     const allowedCheckinStartTime = new Date(appointmentTime.getTime() - ONE_HOUR_IN_MS);
 
@@ -93,7 +90,6 @@ export class QueuesService {
     const existingQueue = await this.queueRepository.findOne({
       where: { appointmentId },
     });
-
     if (existingQueue) {
       throw new BadRequestException(
         'This appointment has already been checked into the queue.',
@@ -103,9 +99,6 @@ export class QueuesService {
     return await this.dataSource.transaction(async (manager) => {
       const transactionalQueueRepo = manager.getRepository(Queue);
       const transactionalAppointmentRepo = manager.getRepository(Appointment);
-      /* const transactionalWalletRepo =manager.getRepository(Wallet);
- 
-       const transactionalPaymentRepo =manager.getRepository(Payment);*/
 
       appointment.checkinTime = new Date();
       await transactionalAppointmentRepo.save(appointment);
@@ -116,7 +109,6 @@ export class QueuesService {
       const endOfToday = new Date();
       endOfToday.setHours(23, 59, 59, 999);
 
-      // مراعاة الـ snake_case لأسماء الأعمدة في قاعدة البيانات لمنع الكراش
       const maxPositionResult = await transactionalQueueRepo
         .createQueryBuilder('queue')
         .select('MAX(queue.position)', 'max')
@@ -132,7 +124,6 @@ export class QueuesService {
         })
         .getRawOne();
 
-      // التحويل الآمن لنوع البيانات لضمان عدم حدوث مشاكل TypeScript
       const nextPosition =
         maxPositionResult && maxPositionResult.max
           ? Number(maxPositionResult.max) + 1
@@ -142,7 +133,6 @@ export class QueuesService {
         appointment.clinicId,
         appointment.doctorId,
       );
-
       const isPriority = appointment.priority === '2';
 
       const queueEntry = transactionalQueueRepo.create({
@@ -155,7 +145,6 @@ export class QueuesService {
         checkinTime: new Date(),
         isPriority,
       });
-
       return await transactionalQueueRepo.save(queueEntry);
     });
   }
@@ -192,76 +181,66 @@ export class QueuesService {
       .orderBy('queue.position', 'ASC')
       .getMany();
   }
-  async startConsultation(
-  queueId: number,
-  currentUser: ActiveUserData,
-): Promise<Queue> {
-  const doctorProfile = await this.doctorRepository.findOne({
-    where: { userId: currentUser.sub },
-  });
-
-  if (!doctorProfile) {
-    throw new NotFoundException('Doctor profile not found.');
-  }
-
-  const queue = await this.queueRepository.findOne({
-    where: { id: queueId },
-    relations: { appointment: true },
-  });
-
-  if (!queue) {
-    throw new NotFoundException('Queue entry not found.');
-  }
-
-  if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
-    throw new ForbiddenException(
-      'You do not have permission to start this consultation.',
-    );
-  }
-
-  // السماح بالبدء فقط إذا كانت الحالة جاري الاستدعاء (CALLING)
-  if (queue.status !== QueueStatus.CALLING) {
-    throw new BadRequestException(
-      'Consultation can only be started for patients in CALLING status.',
-    );
-  }
-
-  const activeConsultation = await this.queueRepository.findOne({
-    where: {
-      doctorId: doctorProfile.id,
-      status: QueueStatus.IN_PROGRESS,
-    },
-  });
-
-  if (activeConsultation) {
-    throw new BadRequestException(
-      'You already have an active consultation. Please complete or skip it first.',
-    );
-  }
-
-  return await this.dataSource.transaction(async (manager) => {
-    const transactionalQueueRepo = manager.getRepository(Queue);
-    const transactionalAppointmentRepo = manager.getRepository(Appointment);
-  async callNextPatient(doctorId: number, clinicId: number): Promise<Queue> {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-
-    const currentTime = new Date();
-
-    queue.status = QueueStatus.IN_PROGRESS;
-    queue.startedTime = currentTime;
-
-    if (queue.appointment) {
-      queue.appointment.actualStartTime = currentTime;
-      await transactionalAppointmentRepo.save(queue.appointment);
+ async startConsultation(
+    queueId: number,
+    currentUser: ActiveUserData,
+  ): Promise<Queue> {
+    const doctorProfile = await this.doctorRepository.findOne({
+      where: { userId: currentUser.sub },
+    });
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found.');
     }
 
-    return await transactionalQueueRepo.save(queue);
-  });
-}
+    const queue = await this.queueRepository.findOne({
+      where: { id: queueId },
+      relations: { appointment: true },
+    });
+    if (!queue) {
+      throw new NotFoundException('Queue entry not found.');
+    }
 
+    if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
+      throw new ForbiddenException(
+        'You do not have permission to start this consultation.',
+      );
+    }
+
+    if (queue.status !== QueueStatus.CALLING) {
+      throw new BadRequestException(
+        'Consultation can only be started for patients in CALLING status.',
+      );
+    }
+
+    const activeConsultation = await this.queueRepository.findOne({
+      where: {
+        doctorId: doctorProfile.id,
+        status: QueueStatus.IN_PROGRESS,
+      },
+    });
+    if (activeConsultation) {
+      throw new BadRequestException(
+        'You already have an active consultation. Please complete or skip it first.',
+      );
+    }
+
+    return await this.dataSource.transaction(async (manager) => {
+      const transactionalQueueRepo = manager.getRepository(Queue);
+      const transactionalAppointmentRepo = manager.getRepository(Appointment);
+
+      const currentTime = new Date();
+
+      queue.status = QueueStatus.IN_PROGRESS;
+      queue.startedTime = currentTime;
+
+      if (queue.appointment) {
+        queue.appointment.actualStartTime = currentTime;
+        await transactionalAppointmentRepo.save(queue.appointment);
+      }
+
+      return await transactionalQueueRepo.save(queue);
+    });
+  }
 async callNextPatient(doctorUserId: number, clinicId: number): Promise<Queue> {
   const doctorProfile = await this.doctorRepository.findOne({
     where: { userId: doctorUserId },
