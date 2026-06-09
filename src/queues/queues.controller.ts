@@ -27,6 +27,16 @@ export class QueuesController {
     return this.queuesService.getDoctorLiveQueue(currentUser.sub);
   }
 
+@Patch('doctor/call-next')
+  @Roles(UserRole.DOCTOR)
+  async callNextPatient(
+    @Query('clinicId', ParseIntPipe) clinicId: number,
+    @CurrentUser() currentUser: ActiveUserData,
+  ): Promise<Queue> {
+    // نمرر الـ sub (User ID) كبارامتر أول والـ clinicId كبارامتر ثاني
+    return this.queuesService.callNextPatient(currentUser.sub, clinicId);
+  }
+
   @Patch(':id/start-consultation')
   @Roles(UserRole.DOCTOR)
   startConsultation(
