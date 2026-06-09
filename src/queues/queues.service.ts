@@ -16,6 +16,9 @@ import { QueueQueryDto } from './dto/queue-query.dto';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { ActiveUserData } from '../utils';
 import { QueueStatus } from './enums/queue-status.enum';
+import { Payment } from '../payments/entities/payment.entity';
+import { Wallet } from '../wallets/entities/wallet.entity';
+import { PaymentStatus } from '../payments/enums/payment-status.enum';
 
 @Injectable()
 export class QueuesService {
@@ -36,7 +39,13 @@ export class QueuesService {
     private readonly appointmentsService: AppointmentsService,
 
     private readonly dataSource: DataSource,
-  ) {}
+
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
+
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+  ) { }
 
   async createQueueEntry(
     appointmentId: number,
@@ -59,7 +68,7 @@ export class QueuesService {
 
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
-    
+
     // تحويل تاريخ الموعد الفعلي إلى كائن Date للمقارنة الزمنيّة الدقيقة
     const appointmentTime = new Date(appointment.requestedDate);
     const appointmentDateStr = appointmentTime.toISOString().slice(0, 10);
@@ -94,6 +103,9 @@ export class QueuesService {
     return await this.dataSource.transaction(async (manager) => {
       const transactionalQueueRepo = manager.getRepository(Queue);
       const transactionalAppointmentRepo = manager.getRepository(Appointment);
+      /* const transactionalWalletRepo =manager.getRepository(Wallet);
+ 
+       const transactionalPaymentRepo =manager.getRepository(Payment);*/
 
       appointment.checkinTime = new Date();
       await transactionalAppointmentRepo.save(appointment);
@@ -244,7 +256,7 @@ export class QueuesService {
     });
   }
 
-async callNextPatient(doctorId: number, clinicId: number): Promise<Queue> {
+  async callNextPatient(doctorId: number, clinicId: number): Promise<Queue> {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const endOfToday = new Date();
@@ -341,21 +353,72 @@ async callNextPatient(doctorId: number, clinicId: number): Promise<Queue> {
     return await this.dataSource.transaction(async (manager) => {
       const transactionalQueueRepo = manager.getRepository(Queue);
       const transactionalAppointmentRepo = manager.getRepository(Appointment);
+      const transactionalWalletRepo =
+        manager.getRepository(Wallet);
 
+      const transactionalPaymentRepo =
+        manager.getRepository(Payment);
       // تحديث بيانات الطابور
       queue.status = QueueStatus.COMPLETED;
       queue.finishedTime = currentTime;
-      
+
       // حل مشكلة الـ readonly عبر عمل Type Casting (queue as any) للإسناد المؤقت بـ TypeScript
-      (queue as any).consultationDurationMinutes = durationMinutes;
+      //(queue as any).consultationDurationMinutes = durationMinutes;
 
       // تحديث الموعد المرتبط تلقائياً ليكون متناسقاً مع الطابور
       if (queue.appointment) {
         queue.appointment.actualEndTime = currentTime;
-        queue.appointment.status = QueueStatus.COMPLETED; 
+        queue.appointment.status = QueueStatus.COMPLETED;
         await transactionalAppointmentRepo.save(queue.appointment);
       }
+      if (queue.appointment) {
 
+        const payment =
+          await transactionalPaymentRepo.findOne({
+
+            where: {
+              appointmentId:
+                queue.appointment.id,
+            },
+
+          });
+
+        if (payment) {
+
+          const wallet =
+            await transactionalWalletRepo.findOne({
+
+              where: {
+                id: payment.walletId!,
+              },
+
+            });
+
+          if (wallet) {
+
+            wallet.frozenBalance =
+              (
+                Number(wallet.frozenBalance)
+                -
+                Number(payment.amount)
+              ).toFixed(2);
+
+            await transactionalWalletRepo.save(
+              wallet,
+            );
+
+          }
+
+          payment.status =
+            PaymentStatus.COMPLETED;
+
+          await transactionalPaymentRepo.save(
+            payment,
+          );
+
+        }
+
+      }
       return await transactionalQueueRepo.save(queue);
     });
   }

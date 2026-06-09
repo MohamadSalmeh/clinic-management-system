@@ -12,21 +12,35 @@ export class Wallet extends BaseEntity {
   @Column({ name: 'user_id', type: 'bigint', unique: true })
   userId!: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  balance!: string;
+  @Column({
+    name: 'available_balance',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    default: 0,
+  })
+  availableBalance!: string;
 
-  @Column({ name: 'locked_balance', type: 'decimal', precision: 15, scale: 2, default: 0 })
-  lockedBalance!: string;
+  @Column({
+    name: 'frozen_balance',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    default: 0,
+  })
+  frozenBalance!: string;
 
   @Column({ type: 'enum', enum: WalletStatus, default: WalletStatus.ACTIVE })
   status!: WalletStatus;
 
-  @Expose({ name: 'available_balance' })
-  get availableBalance(): string {
-    const balance = Number(this.balance ?? 0);
-    const lockedBalance = Number(this.lockedBalance ?? 0);
-    return (balance - lockedBalance).toFixed(2);
+  @Expose()
+  get totalBalance(): string {
+    return (
+      Number(this.availableBalance) +
+      Number(this.frozenBalance)
+    ).toFixed(2);
   }
+
 
   @OneToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })

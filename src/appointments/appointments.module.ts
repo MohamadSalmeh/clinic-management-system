@@ -13,6 +13,7 @@ import { Appointment } from './entities/appointment.entity';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './index';
 import { QueuesModule } from '../queues/queues.module'; // سطر الإضافة الجديد
+import { Wallet } from '../wallets/entities/wallet.entity';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { QueuesModule } from '../queues/queues.module'; // سطر الإضافة
       DoctorLeave,
       DoctorClinic,
       MedicalProfile,
+      Wallet
     ]),
     AuthModule,
     MedicalProfilesModule,
