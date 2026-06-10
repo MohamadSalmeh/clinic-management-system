@@ -32,7 +32,7 @@ export class PaymentsController {
         private readonly paymentsService: PaymentsService,
     ) { }
 
-    @Post('pay-appointment/:appointmentId')
+   /* @Post('pay-appointment/:appointmentId')
     @Roles(UserRole.PATIENT)
     payAppointment(
 
@@ -52,6 +52,6 @@ export class PaymentsController {
             appointmentId,
         );
 
-    }
+    }*/
 
 }
