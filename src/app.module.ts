@@ -79,9 +79,10 @@ import { ScheduleModule } from '@nestjs/schedule';
     ReferralsModule,
     TransactionsModule,
     DoctorLeavesModule,
+    RatingsModule,
     PatientViolationsModule
   ],
   controllers: [],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

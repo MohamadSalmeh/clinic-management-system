@@ -52,11 +52,16 @@ export class DoctorProfile extends BaseEntity {
     @Column({ name: 'invited_by_admin_id', type: 'bigint', nullable: true })
     invitedByAdminId!: number | null;
 
-    /*@Expose({ name: 'average_rating' })
-    averageRating?: string;
-    @Expose({ name: 'reviews_count' })
-    reviewsCount?: number;*/
-
+   // أضف هذا العمود داخل كلاس DoctorProfile
+    @Column({
+        name: 'average_rating',
+        type: 'decimal',
+        precision: 3,
+        scale: 1,
+        default: 0.0,
+    })
+    averageRating!: number;
+    
     @OneToOne(() => User, (user) => user.doctorProfile, {
         onDelete: 'CASCADE',
     })
