@@ -14,6 +14,11 @@ import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './index';
 import { QueuesModule } from '../queues/queues.module'; // سطر الإضافة الجديد
 import { Wallet } from '../wallets/entities/wallet.entity';
+import { SystemSetting } from '../system-setting/entities/system-setting.entity';
+import { User } from '../users/entities/user.entity';
+import { Payment } from '../payments/entities/payment.entity';
+import { PatientViolation } from '../patient-violations/entities/patient-violation.entity';
+import { AppointmentsCron } from './appointments.cron';
 
 @Module({
   imports: [
@@ -26,14 +31,18 @@ import { Wallet } from '../wallets/entities/wallet.entity';
       DoctorLeave,
       DoctorClinic,
       MedicalProfile,
-      Wallet
+      Wallet,
+      SystemSetting,
+      Payment,
+      PatientViolation,
+      User
     ]),
     AuthModule,
     MedicalProfilesModule,
     forwardRef(() => QueuesModule), // الإضافة هنا لربط موديول الـ Queue
   ],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService],
-  exports: [TypeOrmModule,AppointmentsService],
+  providers: [AppointmentsService, AppointmentsCron,],
+  exports: [TypeOrmModule, AppointmentsService],
 })
-export class AppointmentsModule {}
+export class AppointmentsModule { }

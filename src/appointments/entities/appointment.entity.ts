@@ -34,12 +34,12 @@ export class Appointment extends BaseEntity {
   @Column({ type: 'enum', enum: ['pending','confirmed', 'cancelled', 'completed', 'no_show'] })
   status!: string;
 
-  @Column({
+  /*@Column({
     name: 'payment_status',
     type: 'enum',
     enum: ['paid', 'unpaid', 'partial', 'refunded'],
   })
-  paymentStatus!: string;
+  paymentStatus!: string;*/
 
   @Column({ name: 'requested_date', type: 'date' })
   requestedDate!: Date;

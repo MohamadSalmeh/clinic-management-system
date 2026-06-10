@@ -42,4 +42,12 @@ export class PatientProfile extends BaseEntity {
 
   @OneToMany(() => Referral, (referral) => referral.patient)
   referrals!: Referral[];
+
+  @Column({
+    name: 'no_show_count',
+    type: 'int',
+    nullable: true,
+    default: 0,
+  })
+  noShowCount!: number | null;
 }
