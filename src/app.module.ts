@@ -27,6 +27,8 @@ import { QueuesModule } from './queues/queues.module';
 import { AdminsModule } from './admins/admins.module';
 import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
 import { SystemSettingsModule } from './system-setting/system-settings.module';
+import { PatientViolationsModule } from './patient-violations/patient-violations.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { SystemSettingsModule } from './system-setting/system-settings.module';
         };
       },
     }),
+    ScheduleModule.forRoot(),
     SystemSettingsModule,
     UsersModule,
     AuthModule,
@@ -76,6 +79,7 @@ import { SystemSettingsModule } from './system-setting/system-settings.module';
     ReferralsModule,
     TransactionsModule,
     DoctorLeavesModule,
+    PatientViolationsModule
   ],
   controllers: [],
   providers: [AppService],

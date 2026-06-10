@@ -43,7 +43,7 @@ export class PaymentsService {
 
     ) { }
 
-    async payAppointment(
+   /* async payAppointment(
         userId: number,
         appointmentId: number,
     ) {
@@ -243,6 +243,6 @@ export class PaymentsService {
             },
         );
 
-    }
+    }*/
 
 }
