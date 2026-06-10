@@ -76,8 +76,9 @@ import { SystemSettingsModule } from './system-setting/system-settings.module';
     ReferralsModule,
     TransactionsModule,
     DoctorLeavesModule,
+    RatingsModule,
   ],
   controllers: [],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

@@ -21,6 +21,16 @@ export class Clinic extends BaseEntity {
     @Column({ type: 'enum', enum: ClinicStatus, default: ClinicStatus.ACTIVE })
     status!: ClinicStatus;
 
+    // أضف هذا العمود داخل كلاس Clinic
+    @Column({
+        name: 'average_rating',
+        type: 'decimal',
+        precision: 3,
+        scale: 1,
+        default: 0.0,
+    })
+    averageRating!: number;
+    
     @OneToMany(() => DoctorClinic, (assignment) => assignment.clinic)
     doctorAssignments!: DoctorClinic[];
 

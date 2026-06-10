@@ -9,8 +9,10 @@ import { DoctorProfile } from '../../doctors/entities/doctor-profile.entity';
 
 @Entity({ name: 'ratings' })
 @Check('"score" >= 1 AND "score" <= 5')
-@Unique(['appointmentId', 'patientProfileId'])
-export class Rating extends BaseEntity {
+@Index(['appointmentId', 'patientProfileId'], { 
+  unique: true, 
+  where: `"status" = 'visible'` 
+})export class Rating extends BaseEntity {
   
  @Index()
  @Column({ name: 'patient_profile_id', type: 'bigint' })
@@ -49,10 +51,10 @@ export class Rating extends BaseEntity {
     return this.score !== null && this.score >= 4;
   }
 
-  @OneToOne(() => Appointment, (appointment) => appointment.rating, { nullable: true })
+  @ManyToOne(() => Appointment, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'appointment_id' })
   appointment!: Appointment | null;
-
+  
   @ManyToOne(() => PatientProfile, (patient) => patient.ratings)
   @JoinColumn({ name: 'patient_profile_id' }) 
   patientProfile!: PatientProfile;
