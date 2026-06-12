@@ -1,4 +1,5 @@
 import {
+    ForbiddenException,
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
@@ -30,7 +31,7 @@ export class TransactionsService {
         @InjectRepository(Wallet)
         private readonly walletRepository: Repository<Wallet>,
 
-    ) {}
+    ) { }
 
     async topUp(
         userId: number,
@@ -83,6 +84,157 @@ export class TransactionsService {
         );
 
         return wallet;
+
+    }
+    async getMyTransactions(
+
+        userId: number,
+
+        page: number,
+
+        limit: number,
+
+    ) {
+
+        const [transactions, total] =
+
+            await this.transactionRepository.findAndCount({
+
+                where: {
+
+                    userId,
+
+                },
+
+                order: {
+
+                    created_at: 'DESC',
+
+                },
+
+                skip:
+                    (page - 1) * limit,
+
+                take:
+                    limit,
+
+            });
+
+        return {
+
+            data:
+                transactions,
+
+            total,
+
+            page,
+
+            limit,
+
+            lastPage:
+                Math.ceil(total / limit),
+
+        };
+
+    }
+    async getTransactionById(
+
+        userId: number,
+
+        transactionId: number,
+
+    ): Promise<Transaction> {
+
+        const transaction =
+
+            await this.transactionRepository.findOne({
+
+                where: {
+
+                    id: transactionId,
+
+                },
+
+            });
+
+        if (!transaction) {
+
+            throw new NotFoundException(
+                'Transaction not found',
+            );
+
+        }
+
+        if (
+
+            Number(transaction.userId)
+
+            !==
+
+            Number(userId)
+
+        ) {
+
+            throw new ForbiddenException(
+
+                'You do not have access to this transaction',
+
+            );
+
+        }
+
+        return transaction;
+
+    }
+    async getUserTransactions(
+
+        userId: number,
+
+        page: number,
+
+        limit: number,
+
+    ) {
+
+        const [transactions, total] =
+
+            await this.transactionRepository.findAndCount({
+
+                where: {
+
+                    userId,
+
+                },
+
+                order: {
+
+                    created_at: 'DESC',
+
+                },
+
+                skip:
+                    (page - 1) * limit,
+
+                take:
+                    limit,
+
+            });
+
+        return {
+
+            data:
+                transactions,
+
+            total,
+
+            page,
+
+            limit,
+
+            lastPage:
+                Math.ceil(total / limit),
+
+        };
 
     }
 
