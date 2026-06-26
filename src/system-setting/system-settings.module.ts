@@ -7,19 +7,9 @@ import { SystemSettingsService } from './system-settings.service';
 import { AuthModule } from '../auth';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            SystemSetting,
-        ]),AuthModule
-    ],
-    controllers: [
-        SystemSettingsController,
-    ],
-    providers: [
-        SystemSettingsService,
-    ],
-    exports: [
-        SystemSettingsService,
-    ],
+  imports: [TypeOrmModule.forFeature([SystemSetting]), AuthModule],
+  controllers: [SystemSettingsController],
+  providers: [SystemSettingsService],
+  exports: [SystemSettingsService],
 })
 export class SystemSettingsModule {}

@@ -12,21 +12,12 @@ import { WalletsService } from './wallets.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Wallet,
-      Transaction,
-    ]),
+    TypeOrmModule.forFeature([Wallet, Transaction]),
     UsersModule,
     AuthModule,
   ],
-  controllers: [
-    WalletsController,
-  ],
-  providers: [
-    WalletsService,
-  ],
-  exports: [
-    WalletsService,
-  ],
+  controllers: [WalletsController],
+  providers: [WalletsService],
+  exports: [WalletsService],
 })
 export class WalletsModule {}
