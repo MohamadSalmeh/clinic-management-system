@@ -5,7 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Raw, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  Raw,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
 import {
   AdminAppointmentQueryDto,
@@ -82,7 +88,7 @@ export class AppointmentsService {
 
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) { }
+  ) {}
 
   async createAppointment(
     userId: number,
@@ -91,33 +97,21 @@ export class AppointmentsService {
     const patientProfile = await this.getPatientProfileByUserId(userId);
     await this.ensurePatientMedicalProfileComplete(userId);
 
+    const user = await this.userRepository.findOne({
+      where: {
+        id: userId,
+      },
+    });
 
-    const user =
-      await this.userRepository.findOne({
-
-        where: {
-
-          id: userId,
-
-        },
-
-      });
-
-    if (
-      user?.status ===
-      UserStatus.SUSPENDED
-    ) {
-
+    if (user?.status === UserStatus.SUSPENDED) {
       throw new ForbiddenException(
         'Your account is suspended due to repeated violations.',
       );
-
     }
 
     /*await this.ensurePatientMedicalProfileComplete(
       userId,
     );*/
-
 
     const doctorProfile = await this.getDoctorProfileById(dto.doctorId);
     const clinic = await this.getClinicById(dto.clinicId);
@@ -130,11 +124,7 @@ export class AppointmentsService {
       appointmentFee = Number(doctorProfile.returnVisitFee ?? 0);
     }
     if (appointmentFee <= 0) {
-
-      throw new BadRequestException(
-        'Doctor visit fee is not configured',
-      );
-
+      throw new BadRequestException('Doctor visit fee is not configured');
     }
 
     /* const wallet = await this.walletRepository.findOne({
@@ -162,40 +152,21 @@ export class AppointmentsService {
       dto.endTime,
     );
 
-
     return this.dataSource.transaction(async (manager) => {
-      const walletRepository =
-        manager.getRepository(Wallet);
+      const walletRepository = manager.getRepository(Wallet);
 
-      const wallet =
-        await walletRepository.findOne({
-
-          where: {
-
-            userId,
-
-          },
-
-        });
+      const wallet = await walletRepository.findOne({
+        where: {
+          userId,
+        },
+      });
 
       if (!wallet) {
-
-        throw new NotFoundException(
-          'Wallet not found',
-        );
-
+        throw new NotFoundException('Wallet not found');
       }
 
-      if (
-        Number(wallet.availableBalance)
-        <
-        appointmentFee
-      ) {
-
-        throw new BadRequestException(
-          'Insufficient wallet balance',
-        );
-
+      if (Number(wallet.availableBalance) < appointmentFee) {
+        throw new BadRequestException('Insufficient wallet balance');
       }
       const appointmentRepository = manager.getRepository(Appointment);
 
@@ -207,10 +178,7 @@ export class AppointmentsService {
         dto.endTime,
       );
 
-
-
       const appointment = appointmentRepository.create({
-
         patientId: patientProfile.id,
         doctorId: doctorProfile.id,
         clinicId: clinic.id,
@@ -228,79 +196,49 @@ export class AppointmentsService {
         cancelledAt: null,
         checkinTime: null,
         notes: null,
-
       });
 
-      await appointmentRepository.save(
-        appointment,
-      );
+      await appointmentRepository.save(appointment);
 
-      wallet.availableBalance =
-        (
-          Number(wallet.availableBalance)
-          -
-          appointmentFee
-        ).toFixed(2);
+      wallet.availableBalance = (
+        Number(wallet.availableBalance) - appointmentFee
+      ).toFixed(2);
 
-      wallet.frozenBalance =
-        (
-          Number(wallet.frozenBalance)
-          +
-          appointmentFee
-        ).toFixed(2);
+      wallet.frozenBalance = (
+        Number(wallet.frozenBalance) + appointmentFee
+      ).toFixed(2);
 
-      await walletRepository.save(
-        wallet,
-      );
+      await walletRepository.save(wallet);
 
-      const payment =
-        manager
-          .getRepository(Payment)
-          .create({
+      const payment = manager.getRepository(Payment).create({
+        appointmentId: appointment.id,
 
-            appointmentId:
-              appointment.id,
+        walletId: wallet.id,
 
-            walletId:
-              wallet.id,
+        userId,
 
-            userId,
+        amount: appointmentFee.toFixed(2),
 
-            amount:
-              appointmentFee.toFixed(2),
+        appointmentType: appointment.type,
 
-            appointmentType:
-              appointment.type,
+        paymentMethod: PaymentMethod.WALLET,
 
-            paymentMethod:
-              PaymentMethod.WALLET,
+        status: PaymentStatus.HELD,
 
-            status:
-              PaymentStatus.HELD,
+        penaltyAmount: '0',
 
-            penaltyAmount:
-              '0',
+        refundAmount: '0',
 
-            refundAmount:
-              '0',
+        paidAt: new Date(),
+      });
 
-            paidAt:
-              new Date(),
+      await manager.getRepository(Payment).save(payment);
 
-          });
-
-      await manager
-        .getRepository(Payment)
-        .save(payment);
-
-      appointment.status =
-        'confirmed';
+      appointment.status = 'confirmed';
 
       //appointment.payment = payment;
 
-      await appointmentRepository.save(
-        appointment,
-      );
+      await appointmentRepository.save(appointment);
 
       return appointment;
     });
@@ -456,10 +394,7 @@ export class AppointmentsService {
   ): Promise<Appointment> {
     const appointment = await this.getAppointmentWithRelations(id);
 
-    await this.ensureAppointmentAccessForCancellation(
-      appointment,
-      currentUser,
-    );
+    await this.ensureAppointmentAccessForCancellation(appointment, currentUser);
 
     const role = this.getUserRole(currentUser);
     if (appointment.status === 'completed') {
@@ -473,97 +408,58 @@ export class AppointmentsService {
     }
 
     if (appointment.status === 'cancelled') {
-      throw new BadRequestException(
-        'Appointment is already cancelled',
-      );
+      throw new BadRequestException('Appointment is already cancelled');
     }
     return this.dataSource.transaction(async (manager) => {
+      const appointmentRepo = manager.getRepository(Appointment);
 
-      const appointmentRepo =
-        manager.getRepository(Appointment);
+      const paymentRepo = manager.getRepository(Payment);
 
-      const paymentRepo =
-        manager.getRepository(Payment);
+      const walletRepo = manager.getRepository(Wallet);
 
-      const walletRepo =
-        manager.getRepository(Wallet);
+      const settingRepo = manager.getRepository(SystemSetting);
 
-      const settingRepo =
-        manager.getRepository(SystemSetting);
-
-      const payment =
-        await paymentRepo.findOne({
-
-          where: {
-
-            appointmentId: appointment.id,
-
-          },
-
-        });
+      const payment = await paymentRepo.findOne({
+        where: {
+          appointmentId: appointment.id,
+        },
+      });
 
       appointment.status = 'cancelled';
 
       appointment.cancelledAt = new Date();
 
-      appointment.cancellationReason =
-        dto.cancellationReason ?? null;
+      appointment.cancellationReason = dto.cancellationReason ?? null;
 
       if (!payment) {
-
-        return appointmentRepo.save(
-          appointment,
-        );
-
+        return appointmentRepo.save(appointment);
       }
 
-      const wallet =
-        await walletRepo.findOne({
-
-          where: {
-
-            id: payment.walletId!,
-
-          },
-
-        });
+      const wallet = await walletRepo.findOne({
+        where: {
+          id: payment.walletId!,
+        },
+      });
 
       if (!wallet) {
-
-        return appointmentRepo.save(
-          appointment,
-        );
-
+        return appointmentRepo.save(appointment);
       }
 
-      const amount =
-        Number(payment.amount);
+      const amount = Number(payment.amount);
 
-      if (role === UserRole.DOCTOR ||
-        role === UserRole.ADMIN) {
+      if (role === UserRole.DOCTOR || role === UserRole.ADMIN) {
+        wallet.frozenBalance = (Number(wallet.frozenBalance) - amount).toFixed(
+          2,
+        );
 
-        wallet.frozenBalance =
-          (
-            Number(wallet.frozenBalance)
-            -
-            amount
-          ).toFixed(2);
+        wallet.availableBalance = (
+          Number(wallet.availableBalance) + amount
+        ).toFixed(2);
 
-        wallet.availableBalance =
-          (
-            Number(wallet.availableBalance)
-            +
-            amount
-          ).toFixed(2);
+        payment.refundAmount = amount.toFixed(2);
 
-        payment.refundAmount =
-          amount.toFixed(2);
-
-        payment.status =
-          PaymentStatus.REFUNDED;
-
+        payment.status = PaymentStatus.REFUNDED;
       } else {
-
         const settings = await settingRepo.findOne({
           where: {
             id: 1,
@@ -571,11 +467,7 @@ export class AppointmentsService {
         });
 
         if (!settings) {
-
-          throw new NotFoundException(
-            'System settings not found',
-          );
-
+          throw new NotFoundException('System settings not found');
         }
 
         const appointmentDate =
@@ -588,77 +480,43 @@ export class AppointmentsService {
         );
 
         const diffDays =
-          (
-            appointmentDateTime.getTime()
-            -
-            Date.now()
-          ) / (1000 * 60 * 60 * 24);
+          (appointmentDateTime.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
 
-        wallet.frozenBalance =
-          (
-            Number(wallet.frozenBalance)
-            -
-            amount
+        wallet.frozenBalance = (Number(wallet.frozenBalance) - amount).toFixed(
+          2,
+        );
+
+        if (diffDays >= settings.cancelBeforeDays) {
+          wallet.availableBalance = (
+            Number(wallet.availableBalance) + amount
           ).toFixed(2);
 
-        if (
-          diffDays >=
-          settings.cancelBeforeDays
-        ) {
+          payment.refundAmount = amount.toFixed(2);
 
-          wallet.availableBalance =
-            (
-              Number(wallet.availableBalance)
-              +
-              amount
-            ).toFixed(2);
-
-          payment.refundAmount =
-            amount.toFixed(2);
-
-          payment.status =
-            PaymentStatus.REFUNDED;
-
+          payment.status = PaymentStatus.REFUNDED;
         } else {
-
           const penalty =
-            amount *
-            Number(
-              settings.lateCancelPenaltyPercent,
-            ) /
-            100;
+            (amount * Number(settings.lateCancelPenaltyPercent)) / 100;
 
-          const refund =
-            amount - penalty;
+          const refund = amount - penalty;
 
-          wallet.availableBalance =
-            (
-              Number(wallet.availableBalance)
-              +
-              refund
-            ).toFixed(2);
+          wallet.availableBalance = (
+            Number(wallet.availableBalance) + refund
+          ).toFixed(2);
 
-          payment.refundAmount =
-            refund.toFixed(2);
+          payment.refundAmount = refund.toFixed(2);
 
-          payment.penaltyAmount =
-            penalty.toFixed(2);
+          payment.penaltyAmount = penalty.toFixed(2);
 
-          payment.status =
-            PaymentStatus.PARTIAL_REFUNDED;
-
+          payment.status = PaymentStatus.PARTIAL_REFUNDED;
         }
-
       }
 
       await walletRepo.save(wallet);
 
       await paymentRepo.save(payment);
 
-      return appointmentRepo.save(
-        appointment,
-      );
-
+      return appointmentRepo.save(appointment);
     });
     /*
     appointment.status = 'cancelled';
@@ -671,8 +529,6 @@ export class AppointmentsService {
     );
     
     */
-
-
   }
 
   async checkInAppointment(
@@ -702,281 +558,156 @@ export class AppointmentsService {
   }
 
   private async applyNoShow(
-
     appointment: Appointment,
 
     manager: EntityManager,
 
     createdBy: ViolationCreatedBy,
-
   ): Promise<void> {
+    const appointmentRepo = manager.getRepository(Appointment);
 
-    const appointmentRepo =
-      manager.getRepository(Appointment);
+    const paymentRepo = manager.getRepository(Payment);
 
-    const paymentRepo =
-      manager.getRepository(Payment);
+    const walletRepo = manager.getRepository(Wallet);
 
-    const walletRepo =
-      manager.getRepository(Wallet);
+    const patientRepo = manager.getRepository(PatientProfile);
 
-    const patientRepo =
-      manager.getRepository(PatientProfile);
+    const userRepo = manager.getRepository(User);
 
-    const userRepo =
-      manager.getRepository(User);
+    const settingRepo = manager.getRepository(SystemSetting);
 
-    const settingRepo =
-      manager.getRepository(SystemSetting);
-
-    const violationRepo =
-      manager.getRepository(PatientViolation);
+    const violationRepo = manager.getRepository(PatientViolation);
 
     appointment.status = 'no_show';
 
-    const payment =
-      await paymentRepo.findOne({
-
-        where: {
-
-          appointmentId:
-            appointment.id,
-
-        },
-
-      });
+    const payment = await paymentRepo.findOne({
+      where: {
+        appointmentId: appointment.id,
+      },
+    });
 
     if (payment) {
-
-      if (
-        payment.status ===
-        PaymentStatus.FORFEITED
-      ) {
-
-        throw new BadRequestException(
-          'Appointment already marked as no-show',
-        );
-
+      if (payment.status === PaymentStatus.FORFEITED) {
+        throw new BadRequestException('Appointment already marked as no-show');
       }
-      if (
-        payment.status !==
-        PaymentStatus.HELD
-      ) {
-
-        throw new BadRequestException(
-          'Payment is not held',
-        );
-
+      if (payment.status !== PaymentStatus.HELD) {
+        throw new BadRequestException('Payment is not held');
       }
 
-      const wallet =
-        await walletRepo.findOne({
-
-          where: {
-
-            id: payment.walletId!,
-
-          },
-
-        });
-
-      if (wallet) {
-
-        wallet.frozenBalance =
-          (
-            Number(wallet.frozenBalance)
-            -
-            Number(payment.amount)
-          ).toFixed(2);
-
-        await walletRepo.save(wallet);
-
-      }
-
-      payment.status =
-        PaymentStatus.FORFEITED;
-      payment.penaltyAmount =
-        payment.amount;
-
-      await paymentRepo.save(payment);
-
-    }
-
-    const patient =
-      await patientRepo.findOne({
-
+      const wallet = await walletRepo.findOne({
         where: {
-
-          id: appointment.patientId,
-
+          id: payment.walletId!,
         },
-
       });
 
-    if (patient) {
+      if (wallet) {
+        wallet.frozenBalance = (
+          Number(wallet.frozenBalance) - Number(payment.amount)
+        ).toFixed(2);
 
-      patient.noShowCount =
-        Number(patient.noShowCount ?? 0) + 1;
+        await walletRepo.save(wallet);
+      }
+
+      payment.status = PaymentStatus.FORFEITED;
+      payment.penaltyAmount = payment.amount;
+
+      await paymentRepo.save(payment);
+    }
+
+    const patient = await patientRepo.findOne({
+      where: {
+        id: appointment.patientId,
+      },
+    });
+
+    if (patient) {
+      patient.noShowCount = Number(patient.noShowCount ?? 0) + 1;
 
       await patientRepo.save(patient);
 
-      const violation =
-        violationRepo.create({
+      const violation = violationRepo.create({
+        userId: patient.userId,
 
-          userId: patient.userId,
+        appointmentId: appointment.id,
 
-          appointmentId:
-            appointment.id,
+        type: ViolationType.NO_SHOW,
 
-          type:
-            ViolationType.NO_SHOW,
+        createdBy,
 
-          createdBy,
+        notes: 'Patient did not attend appointment',
+      });
 
+      await violationRepo.save(violation);
 
-          notes:
-            'Patient did not attend appointment',
+      const settings = await settingRepo.findOne({
+        where: {
+          id: 1,
+        },
+      });
 
-        });
-
-      await violationRepo.save(
-        violation,
-      );
-
-      const settings =
-        await settingRepo.findOne({
-
-          where: {
-
-            id: 1,
-
-          },
-
-        });
-
-      if (
-        settings &&
-        patient.noShowCount >=
-        settings.maxNoShowCount
-      ) {
-
+      if (settings && patient.noShowCount >= settings.maxNoShowCount) {
         await userRepo.update(
-
           {
-
             id: patient.userId,
-
           },
 
           {
-
-            status:
-              UserStatus.SUSPENDED,
-
+            status: UserStatus.SUSPENDED,
           },
-
         );
-
       }
-
     }
 
-    await appointmentRepo.save(
-      appointment,
-    );
+    await appointmentRepo.save(appointment);
   }
   async markNoShow(
     id: number,
     currentUser: ActiveUserData,
   ): Promise<Appointment> {
+    const appointment = await this.getAppointmentWithRelations(id);
 
-    const appointment =
-      await this.getAppointmentWithRelations(
-        id,
-      );
-
-    this.ensureDoctorOwnership(
-      appointment,
-      currentUser,
-    );
+    this.ensureDoctorOwnership(appointment, currentUser);
     const today = new Date();
 
-    today.setHours(
-      0,
-      0,
-      0,
-      0,
-    );
+    today.setHours(0, 0, 0, 0);
 
-    const appointmentDate =
-      new Date(
-        appointment.requestedDate,
-      );
+    const appointmentDate = new Date(appointment.requestedDate);
 
-    appointmentDate.setHours(
-      0,
-      0,
-      0,
-      0,
-    );
+    appointmentDate.setHours(0, 0, 0, 0);
 
-    if (
-      appointmentDate >
-      today
-    ) {
-
+    if (appointmentDate > today) {
       throw new BadRequestException(
         'Future appointments cannot be marked as no-show',
       );
-
     }
 
     if (appointment.status === 'no_show') {
-
-      throw new BadRequestException(
-        'Appointment already marked as no-show',
-      );
-
+      throw new BadRequestException('Appointment already marked as no-show');
     }
 
     if (appointment.status === 'completed') {
-
       throw new BadRequestException(
         'Completed appointment cannot become no-show',
       );
-
     }
 
     if (appointment.status === 'cancelled') {
-
       throw new BadRequestException(
         'Cancelled appointment cannot become no-show',
       );
-
     }
 
-    await this.dataSource.transaction(
+    await this.dataSource.transaction(async (manager) => {
+      await this.applyNoShow(
+        appointment,
 
-      async (manager) => {
+        manager,
 
-        await this.applyNoShow(
+        ViolationCreatedBy.DOCTOR,
+      );
+    });
 
-          appointment,
-
-          manager,
-
-          ViolationCreatedBy.DOCTOR,
-
-        );
-
-      },
-
-    );
-
-    return this.getAppointmentWithRelations(
-      id,
-    );
-
+    return this.getAppointmentWithRelations(id);
   }
   /*async markNoShow(
     id: number,
@@ -1509,7 +1240,6 @@ export class AppointmentsService {
   }
   //
   async calculateNextAvailableTime(dto: CalculateAppointmentTimeDto) {
-
     const schedule = await this.doctorScheduleRepository.findOne({
       where: {
         id: dto.scheduleId,
@@ -1523,10 +1253,7 @@ export class AppointmentsService {
       throw new BadRequestException('Schedule not found');
     }
 
-    const duration =
-      dto.type === 'Initial Visit'
-        ? 30
-        : 20;
+    const duration = dto.type === 'Initial Visit' ? 30 : 20;
 
     const appointments = await this.appointmentRepository
       .createQueryBuilder('appointment')
@@ -1545,14 +1272,12 @@ export class AppointmentsService {
     let start = schedule.startTime;
 
     if (appointments.length > 0) {
-
-      const insideSchedule = appointments.filter(a =>
-        a.startTime >= schedule.startTime &&
-        a.endTime <= schedule.endTime,
+      const insideSchedule = appointments.filter(
+        (a) =>
+          a.startTime >= schedule.startTime && a.endTime <= schedule.endTime,
       );
 
       if (insideSchedule.length > 0) {
-
         start = insideSchedule[insideSchedule.length - 1].endTime;
       }
     }
@@ -1560,9 +1285,7 @@ export class AppointmentsService {
     const end = this.addMinutes(start, duration);
 
     if (end > schedule.endTime) {
-      throw new BadRequestException(
-        'No available time in this schedule',
-      );
+      throw new BadRequestException('No available time in this schedule');
     }
 
     return {
@@ -1571,7 +1294,6 @@ export class AppointmentsService {
     };
   }
   private addMinutes(time: string, minutes: number): string {
-
     const [h, m, s] = time.split(':').map(Number);
 
     const date = new Date();
@@ -1583,7 +1305,6 @@ export class AppointmentsService {
     return date.toTimeString().slice(0, 8);
   }
   async getWaitList(dto: WaitListDto) {
-
     const appointments = await this.appointmentRepository
       .createQueryBuilder('appointment')
       .where('appointment.doctorId = :doctorId', {
@@ -1638,7 +1359,6 @@ export class AppointmentsService {
     end.setFullYear(end.getFullYear() + 1);
 
     while (today <= end) {
-
       const dayOfWeek = today.getDay();
 
       const hasSchedule = schedules.some(
@@ -1648,11 +1368,9 @@ export class AppointmentsService {
       );
 
       if (hasSchedule) {
-
         const dateString = today.toISOString().slice(0, 10);
 
         const hasFullDayLeave = leaves.some((leave) => {
-
           const leaveDate = new Date(leave.exceptionDate);
           leaveDate.setHours(12, 0, 0, 0);
 
@@ -1677,67 +1395,41 @@ export class AppointmentsService {
     return result;
   }
   async processDailyNoShows(): Promise<void> {
-
     const yesterday = new Date();
 
-    yesterday.setDate(
-      yesterday.getDate() - 1,
-    );
+    yesterday.setDate(yesterday.getDate() - 1);
 
-    const yesterdayString =
-      yesterday
-        .toISOString()
-        .split('T')[0];
+    const yesterdayString = yesterday.toISOString().split('T')[0];
 
-    const appointments =
-      await this.appointmentRepository
+    const appointments = await this.appointmentRepository
 
-        .createQueryBuilder('appointment')
+      .createQueryBuilder('appointment')
 
-        .where(
-          'appointment.status = :status',
-          {
-            status: 'confirmed',
-          },
-        )
+      .where('appointment.status = :status', {
+        status: 'confirmed',
+      })
 
-        .andWhere(
-          'appointment.requestedDate = :yesterday',
-          {
-            yesterday: yesterdayString,
-          },
-        )
+      .andWhere('appointment.requestedDate = :yesterday', {
+        yesterday: yesterdayString,
+      })
 
-        .getMany();
+      .getMany();
 
     if (!appointments.length) {
-
       return;
-
     }
 
-    await this.dataSource.transaction(
+    await this.dataSource.transaction(async (manager) => {
+      for (const appointment of appointments) {
+        await this.applyNoShow(
+          appointment,
 
-      async (manager) => {
+          manager,
 
-        for (const appointment of appointments) {
-
-          await this.applyNoShow(
-
-            appointment,
-
-            manager,
-
-            ViolationCreatedBy.SYSTEM,
-
-          );
-
-        }
-
-      },
-
-    );
-
+          ViolationCreatedBy.SYSTEM,
+        );
+      }
+    });
   }
 
   //

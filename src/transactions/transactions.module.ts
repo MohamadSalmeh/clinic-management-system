@@ -7,38 +7,12 @@ import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 
 @Module({
+  imports: [TypeOrmModule.forFeature([Transaction, Wallet]), AuthModule],
 
-  imports: [
+  controllers: [TransactionsController],
 
-    TypeOrmModule.forFeature([
+  providers: [TransactionsService],
 
-      Transaction,
-
-      Wallet,
-
-    ]),
-
-    AuthModule,
-
-  ],
-
-  controllers: [
-
-    TransactionsController,
-
-  ],
-
-  providers: [
-
-    TransactionsService,
-
-  ],
-
-  exports: [
-
-    TransactionsService,
-
-  ],
-
+  exports: [TransactionsService],
 })
-export class TransactionsModule { }
+export class TransactionsModule {}

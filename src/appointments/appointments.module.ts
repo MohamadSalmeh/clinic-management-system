@@ -35,14 +35,14 @@ import { AppointmentsCron } from './appointments.cron';
       SystemSetting,
       Payment,
       PatientViolation,
-      User
+      User,
     ]),
     AuthModule,
     MedicalProfilesModule,
     forwardRef(() => QueuesModule), // الإضافة هنا لربط موديول الـ Queue
   ],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService, AppointmentsCron,],
+  providers: [AppointmentsService, AppointmentsCron],
   exports: [TypeOrmModule, AppointmentsService],
 })
-export class AppointmentsModule { }
+export class AppointmentsModule {}
