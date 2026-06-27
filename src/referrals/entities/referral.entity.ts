@@ -73,6 +73,19 @@ export class Referral extends BaseEntity {
     reason!: string;
 
     @Column({
+        name: 'cancellation_reason',
+        type: 'text',
+        nullable: true,
+    })
+    cancellationReason !: string | null;
+     @Column({
+        name: 'cancelled_at',
+        type: 'timestamp',
+        nullable: true,
+    })
+    cancelledAt!: Date | null;
+    
+    @Column({
         type: 'enum',
         enum: ReferralStatus,
         default: ReferralStatus.PENDING,
