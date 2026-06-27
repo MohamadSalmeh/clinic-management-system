@@ -1,8 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-
 import { SystemSetting } from './entities/system-setting.entity';
 import { UpdateSystemSettingDto } from './dto/update-system-setting.dto';
 
@@ -15,16 +13,11 @@ export class SystemSettingsService {
 
   async getSettings(): Promise<SystemSetting> {
     let settings = await this.systemSettingsRepository.findOne({
-      where: {
-        id: 1,
-      },
+      where: { id: 1 },
     });
 
     if (!settings) {
-      settings = this.systemSettingsRepository.create({
-        id: 1,
-      });
-
+      settings = this.systemSettingsRepository.create({ id: 1 });
       settings = await this.systemSettingsRepository.save(settings);
     }
 
@@ -34,16 +27,63 @@ export class SystemSettingsService {
   async updateSettings(dto: UpdateSystemSettingDto): Promise<SystemSetting> {
     const settings = await this.getSettings();
 
-    settings.cancelBeforeDays = dto.cancelBeforeDays;
+    // تحديث الحقول الموجودة
+    if (dto.cancelBeforeDays !== undefined) {
+      settings.cancelBeforeDays = dto.cancelBeforeDays;
+    }
 
-    settings.lateCancelPenaltyPercent = dto.lateCancelPenaltyPercent.toString();
+    if (dto.lateCancelPenaltyPercent !== undefined) {
+      settings.lateCancelPenaltyPercent =
+        dto.lateCancelPenaltyPercent.toString();
+    }
 
-    settings.maxNoShowCount = dto.maxNoShowCount;
+    if (dto.maxNoShowCount !== undefined) {
+      settings.maxNoShowCount = dto.maxNoShowCount;
+    }
 
-    settings.initialVisitDuration = dto.initialVisitDuration;
+    if (dto.initialVisitDuration !== undefined) {
+      settings.initialVisitDuration = dto.initialVisitDuration;
+    }
 
-    settings.returnVisitDuration = dto.returnVisitDuration;
+    if (dto.returnVisitDuration !== undefined) {
+      settings.returnVisitDuration = dto.returnVisitDuration;
+    }
+
+    if (dto.consultationDuration !== undefined) {
+      settings.consultationDuration = dto.consultationDuration;
+    }
+
+    if (dto.followUpDuration !== undefined) {
+      settings.followUpDuration = dto.followUpDuration;
+    }
+
+    if (dto.operationDuration !== undefined) {
+      settings.operationDuration = dto.operationDuration;
+    }
+
+    if (dto.defaultDuration !== undefined) {
+      settings.defaultDuration = dto.defaultDuration;
+    }
+
+    if (dto.checkinBeforeHours !== undefined) {
+    settings.checkinBeforeHours = dto.checkinBeforeHours;
+  }
 
     return this.systemSettingsRepository.save(settings);
+  }
+
+  async getDurationByAppointmentType(type: string): Promise<number> {
+    const settings = await this.getSettings();
+
+    switch (type) {
+      case 'consultation':
+        return settings.consultationDuration;
+      case 'follow_up':
+        return settings.followUpDuration;
+      case 'operation':
+        return settings.operationDuration;
+      default:
+        return settings.defaultDuration;
+    }
   }
 }

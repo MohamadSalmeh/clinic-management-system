@@ -10,6 +10,8 @@ import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { Appointment } from '../appointments/entities/appointment.entity';
 import { Payment } from '../payments/entities/payment.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
+import { SystemSetting } from '../system-setting/entities/system-setting.entity';
+import { SystemSettingsService } from '../system-setting/system-settings.service';
 
 @Module({
   imports: [
@@ -20,12 +22,13 @@ import { Wallet } from '../wallets/entities/wallet.entity';
       DoctorProfile,
       Wallet,
       Payment,
+      SystemSetting
     ]),
     AuthModule, // تم إضافته هنا ليوفر الـ JwtService وكل مستلزمات الـ Guards لـ الـ Controller
     forwardRef(() => AppointmentsModule),
   ],
   controllers: [QueuesController],
-  providers: [QueuesService],
+  providers: [QueuesService, ],
   exports: [TypeOrmModule, QueuesService],
 })
 export class QueuesModule { }
