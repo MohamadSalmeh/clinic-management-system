@@ -19,6 +19,7 @@ import { User } from '../users/entities/user.entity';
 import { Payment } from '../payments/entities/payment.entity';
 import { PatientViolation } from '../patient-violations/entities/patient-violation.entity';
 import { AppointmentsCron } from './appointments.cron';
+import { ReferralsModule } from '../referrals/referrals.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AppointmentsCron } from './appointments.cron';
     AuthModule,
     MedicalProfilesModule,
     forwardRef(() => QueuesModule), // الإضافة هنا لربط موديول الـ Queue
+    forwardRef(() => ReferralsModule)
   ],
   controllers: [AppointmentsController],
   providers: [AppointmentsService, AppointmentsCron],

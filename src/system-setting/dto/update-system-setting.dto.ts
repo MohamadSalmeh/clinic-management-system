@@ -47,4 +47,14 @@ export class UpdateSystemSettingDto {
   @Min(0)
   @Max(12) // كحد أقصى 12 ساعة
   checkinBeforeHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  referralFollowUpExpirationDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  referralExternalExpirationDays?: number;
 }
