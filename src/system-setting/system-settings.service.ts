@@ -69,6 +69,14 @@ export class SystemSettingsService {
     settings.checkinBeforeHours = dto.checkinBeforeHours;
   }
 
+  if (dto.referralFollowUpExpirationDays !== undefined) {
+      settings.referralFollowUpExpirationDays = dto.referralFollowUpExpirationDays;
+    }
+
+    if (dto.referralExternalExpirationDays !== undefined) {
+      settings.referralExternalExpirationDays = dto.referralExternalExpirationDays;
+    }
+    
     return this.systemSettingsRepository.save(settings);
   }
 

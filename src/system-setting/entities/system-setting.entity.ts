@@ -76,4 +76,18 @@ export class SystemSetting extends BaseEntity {
   })
   checkinBeforeHours!: number;
 
+  @Column({
+        name: 'referral_follow_up_expiration_days',
+        type: 'int',
+        default: 14,
+    })
+    referralFollowUpExpirationDays!: number;
+
+    @Column({
+        name: 'referral_external_expiration_days',
+        type: 'int',
+        default: 30,
+    })
+    referralExternalExpirationDays!: number;
+    
 }
