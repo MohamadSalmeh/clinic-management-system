@@ -74,5 +74,13 @@ export function combineDateAndTime(date: string, time: string): Date {
 export function addDays(date: Date | string, days: number): Date {
   const d = typeof date === 'string' ? new Date(date) : new Date(date);
   d.setDate(d.getDate() + days);
-  return d;
+  return d; 
+}
+
+/**
+ * الحصول على الوقت والتاريخ الحالي للنظام بشكل موحد
+ * (يمكنك هنا مستقبلاً تعديل التوقيت ليناسب Timezone محدد للعيادة إذا لزم الأمر)
+ */
+export function nowDate(): Date {
+  return new Date();
 }

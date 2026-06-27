@@ -1,4 +1,5 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsNumber, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ReferralStatus, ReferralType } from '../entities/referral.entity';
 
 export class ReferralQueryDto {
@@ -11,10 +12,31 @@ export class ReferralQueryDto {
     type?: ReferralType;
 
     @IsOptional()
-    @IsString()
-    page?: string;
+    @Type(() => Number)
+    @IsInt()
+    @Min(1)
+    page?: number;
 
     @IsOptional()
-    @IsString()
-    limit?: string;
+    @Type(() => Number)
+    @IsInt()
+    @Min(1)
+    @Max(100)
+    limit?: number;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    patientId?: number;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    fromDoctorId?: number;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    toClinicId?: number;
 }
+
