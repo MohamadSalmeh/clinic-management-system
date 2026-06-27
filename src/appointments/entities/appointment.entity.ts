@@ -25,6 +25,10 @@ export class Appointment extends BaseEntity {
   @Column({ name: 'clinic_id', type: 'bigint' })
   clinicId!: number;
 
+  @Index()
+  @Column({ name: 'referral_id', type: 'bigint', nullable: true })
+  referralId!: number | null;
+
   @Column({ type: 'varchar', length: 100 })
   type!: string;
 
@@ -107,6 +111,7 @@ export class Appointment extends BaseEntity {
   @OneToOne(() => Queue, (queue) => queue.appointment)
   queue!: Queue;
 
-  @OneToOne(() => Referral, (referral) => referral.appointment)
+  @OneToOne(() => Referral, (referral) => referral.appointment, { nullable: true })
+  @JoinColumn({ name: 'referral_id' }) // 💡 لربط الحقل بالعلاقة
   referral!: Referral | null;
 }
