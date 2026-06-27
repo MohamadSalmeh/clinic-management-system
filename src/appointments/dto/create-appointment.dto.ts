@@ -35,4 +35,9 @@ export class CreateAppointmentDto {
     @IsOptional()
     @IsString()
     symptoms?: string;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    referralId?: number;
 }

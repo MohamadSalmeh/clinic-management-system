@@ -47,6 +47,11 @@ import { UserStatus } from '../users/enums/user-status.enum';
 import { ViolationCreatedBy } from '../patient-violations/enums/violation-created-by.enum';
 import { ViolationType } from '../patient-violations/enums/violation-type.enum';
 import { PaymentMethod } from '../payments/enums/payment-method.enum';
+import { ReferralsService } from '../referrals/referrals.service';
+import {
+  Referral,
+  ReferralStatus,
+} from '../referrals/entities/referral.entity';
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -88,8 +93,10 @@ export class AppointmentsService {
 
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) {}
 
+    @Inject(forwardRef(() => ReferralsService))
+    private readonly referralsService: ReferralsService,
+  ) {}
   async createAppointment(
     userId: number,
     dto: CreateAppointmentDto,
@@ -110,11 +117,21 @@ export class AppointmentsService {
     }
 
     /*await this.ensurePatientMedicalProfileComplete(
-      userId,
-    );*/
+        userId,
+      );*/
 
     const doctorProfile = await this.getDoctorProfileById(dto.doctorId);
     const clinic = await this.getClinicById(dto.clinicId);
+
+    // 💡 جديد: التحقق المبدئي من صلاحية الإحالة وقيودها الطبية (خارج الـ Transaction وبدون حفظ)
+    if (dto.referralId) {
+      await this.referralsService.validateReferralForBooking(
+        dto.referralId,
+        patientProfile.id,
+        doctorProfile.id,
+        clinic.id,
+      );
+    }
 
     let appointmentFee = 0;
 
@@ -128,20 +145,20 @@ export class AppointmentsService {
     }
 
     /* const wallet = await this.walletRepository.findOne({
-       where: {
-         userId,
-       },
-     });
- 
-     if (!wallet) {
-       throw new NotFoundException('Wallet not found');
-     }
- 
-     if (Number(wallet.availableBalance) < appointmentFee) {
-       throw new BadRequestException(
-         'Insufficient wallet balance',
-       );
-     }*/
+        where: {
+          userId,
+        },
+      });
+  
+      if (!wallet) {
+        throw new NotFoundException('Wallet not found');
+      }
+  
+      if (Number(wallet.availableBalance) < appointmentFee) {
+        throw new BadRequestException(
+          'Insufficient wallet balance',
+        );
+      }*/
 
     await this.ensureDoctorClinicAssignment(doctorProfile.id, clinic.id);
     await this.ensureAppointmentSlotIsValid(
@@ -182,6 +199,7 @@ export class AppointmentsService {
         patientId: patientProfile.id,
         doctorId: doctorProfile.id,
         clinicId: clinic.id,
+        referralId: dto.referralId ?? null, // 💡 جديد: حفظ معرف الإحالة داخل جدول المواعيد للتوثيق والربط
         requestedDate: this.parseDate(dto.requestedDate),
         startTime: dto.startTime,
         endTime: dto.endTime,
@@ -240,6 +258,15 @@ export class AppointmentsService {
 
       await appointmentRepository.save(appointment);
 
+      // 💡 جديد: استهلاك الإحالة وتحويل حالتها إلى COMPLETED وربط الموعد بها بأمان تام باستخدام الـ manager الحالي
+      if (dto.referralId) {
+        await this.referralsService.consumeReferral(
+          dto.referralId,
+          appointment.id,
+          manager,
+        );
+      }
+
       return appointment;
     });
   }
@@ -258,6 +285,7 @@ export class AppointmentsService {
       relations: {
         doctor: { user: true },
         clinic: true,
+        referral: { fromDoctor: { user: true } }, // 💡 جديد: جلب تفاصيل الإحالة والطبيب الصادرة منه لعرض مصدر الموعد في شاشة المريض
       },
       order: { requestedDate: 'DESC', startTime: 'DESC' },
     });
@@ -268,7 +296,6 @@ export class AppointmentsService {
 
     return appointments;
   }
-
   async getMyUpcomingAppointments(userId: number): Promise<Appointment[]> {
     const patientProfile = await this.getPatientProfileByUserId(userId);
 
@@ -309,6 +336,10 @@ export class AppointmentsService {
         doctorId: doctorProfile.id,
       },
     );
+
+    qb.leftJoinAndSelect('appointment.referral', 'referral')
+      .leftJoinAndSelect('referral.fromDoctor', 'fromDoctor')
+      .leftJoinAndSelect('fromDoctor.user', 'fromDoctorUser');
 
     this.applyCommonFilters(qb, query.status, query.from, query.to);
 
@@ -431,6 +462,29 @@ export class AppointmentsService {
 
       appointment.cancellationReason = dto.cancellationReason ?? null;
 
+      // 💡 [جديد]: التحقق مما إذا كان الموعد مبنياً على إحالة طبية لإعادة تدويرها أو إنهاء صلاحيتها
+      if (appointment.referralId) {
+        const referralRepo = manager.getRepository(Referral);
+        const referral = await referralRepo.findOne({
+          where: { id: appointment.referralId },
+        });
+
+        // نتحقق من أن الإحالة كانت مستهلكة بالفعل في هذا الموعد
+        if (referral && referral.status === ReferralStatus.COMPLETED) {
+          const now = new Date();
+
+          // إذا انقضى تاريخ صلاحيتها الأصلي أثناء حجز الموعد، تتحول لـ EXPIRED، وإلا تعود نشطة PENDING للمريض
+          if (referral.expiresAt && new Date(referral.expiresAt) < now) {
+            referral.status = ReferralStatus.EXPIRED;
+          } else {
+            referral.status = ReferralStatus.PENDING;
+          }
+
+          referral.appointmentId = null; // فك ارتباط الإحالة بالموعد الملتغى نهائياً
+          await referralRepo.save(referral);
+        }
+      }
+
       if (!payment) {
         return appointmentRepo.save(appointment);
       }
@@ -518,19 +572,7 @@ export class AppointmentsService {
 
       return appointmentRepo.save(appointment);
     });
-    /*
-    appointment.status = 'cancelled';
-    appointment.cancelledAt = new Date();
-    appointment.cancellationReason =
-      dto.cancellationReason ?? null;
-    
-    return this.appointmentRepository.save(
-      appointment,
-    );
-    
-    */
   }
-
   async checkInAppointment(
     id: number,
     currentUser: ActiveUserData,
@@ -1032,7 +1074,7 @@ export class AppointmentsService {
         payment: true,
         rating: true,
         queue: true,
-        referral: true,
+        referral: { fromDoctor: { user: true } },
       },
     });
 
