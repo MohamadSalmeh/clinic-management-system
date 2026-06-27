@@ -42,6 +42,14 @@ export class Queue extends BaseEntity {
   @Column({ name: 'is_priority', type: 'boolean', default: false })
   isPriority!: boolean;
 
+  @Column({
+    name: 'actual_duration_minutes',
+    type: 'int',
+    nullable: true,
+    default: null,
+  })
+  actualDurationMinutes!: number | null;
+  
   @Expose({ name: 'waiting_time_minutes' })
   get waitingTimeMinutes(): number {
     if (this.startedTime && this.checkinTime) {

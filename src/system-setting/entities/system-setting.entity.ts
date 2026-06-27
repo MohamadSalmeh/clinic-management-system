@@ -40,4 +40,40 @@ export class SystemSetting extends BaseEntity {
         default: 20,
     })
     returnVisitDuration!: number;
+
+      @Column({
+        name: 'consultation_duration',
+        type: 'int',
+        default: 20,
+    })
+    consultationDuration!: number;
+
+    @Column({
+        name: 'follow_up_duration',
+        type: 'int',
+        default: 10,
+    })
+    followUpDuration!: number;
+
+    @Column({
+        name: 'operation_duration',
+        type: 'int',
+        default: 45,
+    })
+    operationDuration!: number;
+
+    @Column({
+        name: 'default_duration',
+        type: 'int',
+        default: 15,
+    })
+    defaultDuration!: number;
+
+    @Column({
+    name: 'checkin_before_hours',
+    type: 'int',
+    default: 1,
+  })
+  checkinBeforeHours!: number;
+
 }
