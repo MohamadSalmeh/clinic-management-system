@@ -32,6 +32,7 @@ import { PatientViolationsModule } from './patient-violations/patient-violations
 import { ScheduleModule } from '@nestjs/schedule';
 import { FileStorageModule } from './file-storage/file-storage.module';
 import { AppointmentAccessModule } from './appointment-access/appointment-access.module';
+import { FavoriteDoctorsModule } from './favorite-doctors/favorite-doctors.module';
 
 @Module({
   imports: [
@@ -86,9 +87,10 @@ import { AppointmentAccessModule } from './appointment-access/appointment-access
     RatingsModule,
     PatientViolationsModule,
     FileStorageModule,
-    AppointmentAccessModule
+    AppointmentAccessModule,
+    FavoriteDoctorsModule,
   ],
   controllers: [],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
