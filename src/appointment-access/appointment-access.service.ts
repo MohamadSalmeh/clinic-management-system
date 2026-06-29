@@ -13,6 +13,8 @@ import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { PatientProfile } from '../patients/entities/patient-profile.entity';
 import { MedicalHistory } from '../medical-histories/entities/medical-history.entity';
 import { MedicalProfile } from '../medical-profiles/entities/medical-profile.entity';
+import { addDays, nowDate } from '../common/utils/date-utils';
+
 const MEDICAL_RECORD_EDIT_WINDOW_DAYS = 7;
 
 @Injectable()
@@ -73,13 +75,11 @@ export class AppointmentAccessService {
             );
         }
 
-        const expiryDate = new Date(appointment.requestedDate);
+        // ✅ التعديل: استخدام addDays بدلاً من setDate
+        const expiryDate = addDays(appointment.requestedDate, MEDICAL_RECORD_EDIT_WINDOW_DAYS);
 
-        expiryDate.setDate(
-            expiryDate.getDate() + MEDICAL_RECORD_EDIT_WINDOW_DAYS,
-        );
-
-        if (new Date() > expiryDate) {
+        // ✅ التعديل: استخدام nowDate() بدلاً من new Date()
+        if (nowDate() > expiryDate) {
             throw new BadRequestException(
                 'Medical record edit window has expired',
             );

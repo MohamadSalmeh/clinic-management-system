@@ -12,6 +12,7 @@ import { MailService } from '../mail/mail.service';
 import { DoctorInvitation } from './entities/doctor-invitation.entity';
 import { DoctorInvitationStatus } from './enums/doctor-invitation-status.enum';
 import { DoctorInvitationCancelledEvent, DoctorInvitationCreatedEvent, DoctorInvitationRejectedEvent } from '../notifications/events';
+import { addDays, nowDate, toDateString } from '../common/utils/date-utils';
 
 const INVITATION_TTL_DAYS = parseInt(process.env.DOCTOR_INVITATION_TTL_DAYS || '7', 10);
 const TOKEN_GENERATION_MAX_ATTEMPTS = 3;
@@ -59,7 +60,7 @@ export class DoctorInvitationsService {
                         new DoctorInvitationCreatedEvent({
                             userId: invitedByAdminId,
                             invitationId: savedInvitation.id,
-                            expiresAt: savedInvitation.expiresAt.toISOString(),
+                            expiresAt: toDateString(savedInvitation.expiresAt),
                         }),
                     );
                 }
@@ -180,13 +181,13 @@ export class DoctorInvitationsService {
     }
 
     private getExpirationDate(): Date {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + INVITATION_TTL_DAYS);
-        return expiresAt;
+        // ✅ التعديل: استخدام nowDate() و addDays()
+        return addDays(nowDate(), INVITATION_TTL_DAYS);
     }
 
     private isExpired(invitation: DoctorInvitation): boolean {
-        return invitation.expiresAt.getTime() <= Date.now();
+        // ✅ التعديل: استخدام nowDate() بدلاً من Date.now()
+        return invitation.expiresAt.getTime() <= nowDate().getTime();
     }
 
     private async generateUniqueToken(): Promise<string> {
