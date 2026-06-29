@@ -8,6 +8,7 @@ import { MedicalProfileLogQueryDto } from './dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ActiveUserData } from '../utils';
 import { AppointmentAccessService } from '../appointment-access/appointment-access.service';
+import { endOfDay, startOfDay } from '../common/utils/date-utils';
 
 export type MedicalProfileLogResponse = {
     id: number;
@@ -101,19 +102,11 @@ export class MedicalProfileLogsService {
         }
 
         if (query.from) {
-            qb.andWhere('log.created_at >= :from', { from: new Date(query.from) });
+            qb.andWhere('log.created_at >= :from', { from: startOfDay(query.from), });
         }
 
         if (query.to) {
-            qb.andWhere('log.created_at <= :to', { to: new Date(query.to) });
-        }
-        if (query.to) {
-            const endDate = new Date(query.to);
-            endDate.setHours(23, 59, 59, 999);
-
-            qb.andWhere('log.created_at <= :to', {
-                to: endDate,
-            });
+            qb.andWhere('log.created_at <= :to', { to: endOfDay(query.to), });
         }
 
         return qb

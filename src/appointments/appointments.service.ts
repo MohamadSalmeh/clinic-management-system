@@ -61,6 +61,24 @@ import {
   ReferralConsumedEvent,
   WalletTransactionEvent,
 } from '../notifications/events';
+import {
+  nowDate,
+  toDateOnly,
+  toDateString,
+  startOfDay,
+  endOfDay,
+  addDays,
+  addMinutes,
+  combineDateAndTime,
+  daysDiff,
+  isSameDay,
+  isAfter,
+  currentTimeString,
+  todayDateString,
+  addYears,
+  getDayOfWeek,
+  addMinutesToTime
+} from '../common/utils/date-utils';
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -106,7 +124,7 @@ export class AppointmentsService {
     @Inject(forwardRef(() => ReferralsService))
     private readonly referralsService: ReferralsService,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+  ) { }
   async createAppointment(
     userId: number,
     dto: CreateAppointmentDto,
@@ -257,7 +275,7 @@ export class AppointmentsService {
 
         refundAmount: '0',
 
-        paidAt: new Date(),
+        paidAt: nowDate(),
       });
 
       await manager.getRepository(Payment).save(payment);
@@ -311,7 +329,7 @@ export class AppointmentsService {
       new AppointmentBookedEvent({
         userId,
         appointmentId: result.appointment.id,
-        requestedDate: result.appointment.requestedDate.toISOString().slice(0, 10),
+        requestedDate: toDateString(result.appointment.requestedDate),
         startTime: result.appointment.startTime,
         endTime: result.appointment.endTime,
         doctorName: null,
@@ -358,8 +376,8 @@ export class AppointmentsService {
       .andWhere(
         '(appointment.requestedDate > :today OR (appointment.requestedDate = :today AND appointment.startTime > :currentTime))',
         {
-          today: this.todayDateString(),
-          currentTime: this.currentTimeString(),
+          today: todayDateString(),
+          currentTime: currentTimeString(),
         },
       )
       .orderBy('appointment.requestedDate', 'ASC')
@@ -413,8 +431,8 @@ export class AppointmentsService {
       .andWhere(
         '(appointment.requestedDate > :today OR (appointment.requestedDate = :today AND appointment.startTime > :currentTime))',
         {
-          today: this.todayDateString(),
-          currentTime: this.currentTimeString(),
+          today: todayDateString(),
+          currentTime: currentTimeString(),
         },
       )
       .orderBy('appointment.requestedDate', 'ASC')
@@ -509,7 +527,7 @@ export class AppointmentsService {
 
       appointment.status = 'cancelled';
 
-      appointment.cancelledAt = new Date();
+      appointment.cancelledAt = nowDate();
 
       appointment.cancellationReason = dto.cancellationReason ?? null;
 
@@ -522,7 +540,7 @@ export class AppointmentsService {
 
         // نتحقق من أن الإحالة كانت مستهلكة بالفعل في هذا الموعد
         if (referral && referral.status === ReferralStatus.COMPLETED) {
-          const now = new Date();
+          const now = nowDate();
 
           // إذا انقضى تاريخ صلاحيتها الأصلي أثناء حجز الموعد، تتحول لـ EXPIRED، وإلا تعود نشطة PENDING للمريض
           if (referral.expiresAt && new Date(referral.expiresAt) < now) {
@@ -579,17 +597,29 @@ export class AppointmentsService {
           throw new NotFoundException('System settings not found');
         }
 
-        const appointmentDate =
+        /*const appointmentDate =
           appointment.requestedDate instanceof Date
             ? appointment.requestedDate.toISOString().slice(0, 10)
-            : appointment.requestedDate;
+            : appointment.requestedDate;*/
+        const appointmentDate = toDateString(
+          appointment.requestedDate,
+        );
 
-        const appointmentDateTime = new Date(
+        /*const appointmentDateTime = new Date(
           `${appointmentDate}T${appointment.startTime}`,
         );
 
         const diffDays =
-          (appointmentDateTime.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+          (appointmentDateTime.getTime() - Date.now()) / (1000 * 60 * 60 * 24);*/
+        const appointmentDateTime = combineDateAndTime(
+          appointmentDate,
+          appointment.startTime,
+        );
+
+        const diffDays = daysDiff(
+          appointmentDateTime,
+          nowDate(),
+        );
 
         wallet.frozenBalance = (Number(wallet.frozenBalance) - amount).toFixed(
           2,
@@ -649,7 +679,7 @@ export class AppointmentsService {
       new AppointmentCancelledEvent({
         userId: appointment.patient.userId,
         appointmentId: result.appointment.id,
-        exceptionDate: result.appointment.requestedDate.toISOString().slice(0, 10),
+        exceptionDate: toDateString(result.appointment.requestedDate),
         doctorName: null,
         clinicName: appointment.clinic?.name ?? null,
       }),
@@ -791,7 +821,7 @@ export class AppointmentsService {
           userId: patient.userId,
           appointmentId: appointment.id,
           noShowCount: patient.noShowCount,
-          suspendedAt: new Date().toISOString(),
+          suspendedAt: nowDate().toISOString(),
         });
       }
     }
@@ -815,7 +845,7 @@ export class AppointmentsService {
     const appointment = await this.getAppointmentWithRelations(id);
 
     this.ensureDoctorOwnership(appointment, currentUser);
-    const today = new Date();
+    /*const today = new Date();
 
     today.setHours(0, 0, 0, 0);
 
@@ -823,7 +853,8 @@ export class AppointmentsService {
 
     appointmentDate.setHours(0, 0, 0, 0);
 
-    if (appointmentDate > today) {
+    if (appointmentDate > today)*/
+    if (isAfter(toDateOnly(appointment.requestedDate), nowDate())) {
       throw new BadRequestException(
         'Future appointments cannot be marked as no-show',
       );
@@ -1046,7 +1077,7 @@ export class AppointmentsService {
   ): Promise<void> {
     this.validateTimeRange(startTime, endTime);
 
-    const dayOfWeek = this.getDayOfWeek(requestedDate);
+    const dayOfWeek = getDayOfWeek(requestedDate);
     console.log(requestedDate);
     console.log(dayOfWeek);
     const schedules = await this.doctorScheduleRepository.find({
@@ -1378,22 +1409,28 @@ export class AppointmentsService {
     return startA < endB && endA > startB;
   }
 
-  private parseDate(date: string): Date {
+  /*private parseDate(date: string): Date {
     const [year, month, day] = date.split('-').map(Number);
     return new Date(year, month - 1, day);
+  }*/
+  private parseDate(date: string): Date {
+    return toDateOnly(date);
   }
-  private getDayOfWeek(date: string): number {
+  /*private getDayOfWeek(date: string): number {
     const [year, month, day] = date.split('-').map(Number);
     return new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).getUTCDay();
-  }
+  }*/
 
-  private todayDateString(): string {
+  /*private todayDateString(): string {
     return new Date().toISOString().slice(0, 10);
-  }
+  }*/
+  /*private todayDateString(): string {
+    return toDateString(nowDate());
+  }*/
 
-  private currentTimeString(): string {
+  /*private currentTimeString(): string {
     return new Date().toISOString().slice(11, 16);
-  }
+  }*/
 
   private getUserRole(currentUser: ActiveUserData): UserRole {
     return currentUser.usertype.toLowerCase() as UserRole;
@@ -1442,7 +1479,7 @@ export class AppointmentsService {
       }
     }
 
-    const end = this.addMinutes(start, duration);
+    const end = addMinutesToTime(start, duration);
 
     if (end > schedule.endTime) {
       throw new BadRequestException('No available time in this schedule');
@@ -1453,7 +1490,7 @@ export class AppointmentsService {
       endTime: end,
     };
   }
-  private addMinutes(time: string, minutes: number): string {
+  /*private addMinutes(time: string, minutes: number): string {
     const [h, m, s] = time.split(':').map(Number);
 
     const date = new Date();
@@ -1463,7 +1500,7 @@ export class AppointmentsService {
     date.setSeconds(s || 0);
 
     return date.toTimeString().slice(0, 8);
-  }
+  }*/
   async getWaitList(dto: WaitListDto) {
     const appointments = await this.appointmentRepository
       .createQueryBuilder('appointment')
@@ -1512,11 +1549,13 @@ export class AppointmentsService {
       dayOfWeek: number;
     }[] = [];
 
-    const today = new Date();
+    const today = nowDate();
+
     today.setHours(12, 0, 0, 0);
 
-    const end = new Date(today);
-    end.setFullYear(end.getFullYear() + 1);
+    /*const end = addDays(today, 365);
+    end.setFullYear(end.getFullYear() + 1);*/
+    const end = addYears(today, 1);
 
     while (today <= end) {
       const dayOfWeek = today.getDay();
@@ -1528,14 +1567,15 @@ export class AppointmentsService {
       );
 
       if (hasSchedule) {
-        const dateString = today.toISOString().slice(0, 10);
+        const dateString =
+          toDateString(today);
 
         const hasFullDayLeave = leaves.some((leave) => {
           const leaveDate = new Date(leave.exceptionDate);
           leaveDate.setHours(12, 0, 0, 0);
 
           return (
-            leaveDate.toISOString().slice(0, 10) === dateString &&
+            toDateString(leaveDate) === dateString &&
             leave.startTime === null &&
             leave.endTime === null
           );
@@ -1555,11 +1595,18 @@ export class AppointmentsService {
     return result;
   }
   async processDailyNoShows(): Promise<void> {
-    const yesterday = new Date();
+    /*const yesterday = new Date();
 
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const yesterdayString = yesterday.toISOString().split('T')[0];
+    const yesterdayString = yesterday.toISOString().split('T')[0];*/
+    const yesterday = addDays(
+      nowDate(),
+      -1,
+    );
+
+    const yesterdayString =
+      toDateString(yesterday);
 
     const appointments = await this.appointmentRepository
 
@@ -1588,11 +1635,11 @@ export class AppointmentsService {
       for (const appointment of appointments) {
         results.push(
           await this.applyNoShow(
-          appointment,
+            appointment,
 
-          manager,
+            manager,
 
-          ViolationCreatedBy.SYSTEM,
+            ViolationCreatedBy.SYSTEM,
           ),
         );
       }

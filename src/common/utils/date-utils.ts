@@ -74,7 +74,7 @@ export function combineDateAndTime(date: string, time: string): Date {
 export function addDays(date: Date | string, days: number): Date {
   const d = typeof date === 'string' ? new Date(date) : new Date(date);
   d.setDate(d.getDate() + days);
-  return d; 
+  return d;
 }
 
 /**
@@ -117,3 +117,57 @@ export function isAfter(date1: Date | string, date2: Date | string): boolean {
 export function isSameOrBefore(date1: Date | string, date2: Date | string): boolean {
   return new Date(date1).getTime() <= new Date(date2).getTime();
 }
+
+export function currentTimeString(): string {
+  const now = nowDate();
+
+  return `${String(now.getHours()).padStart(2, '0')}:${String(
+    now.getMinutes(),
+  ).padStart(2, '0')}`;
+}
+export function todayDateString(): string {
+  return toDateString(nowDate());
+}
+export function addYears(
+  date: Date | string,
+  years: number,
+): Date {
+  const d = typeof date === 'string'
+    ? new Date(date)
+    : new Date(date);
+
+  d.setFullYear(d.getFullYear() + years);
+
+  return d;
+}
+
+export function getDayOfWeek(
+  date: string,
+): number {
+  const [year, month, day] = date.split('-').map(Number);
+
+  return new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      12,
+      0,
+      0,
+    ),
+  ).getUTCDay();
+}
+export function addMinutesToTime(
+  time: string,
+  minutes: number,
+): string {
+  const [hours, mins, seconds] = time.split(':').map(Number);
+
+  const date = new Date();
+  date.setHours(hours, mins, seconds || 0, 0);
+
+  date.setMinutes(date.getMinutes() + minutes);
+
+  return date.toTimeString().slice(0, 8);
+}
+//

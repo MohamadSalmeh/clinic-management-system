@@ -7,6 +7,7 @@ import { CreateDoctorLeaveDto, DoctorLeaveQueryDto } from './dto';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { Appointment } from '../appointments/entities/appointment.entity';
 import { AppointmentCancelledEvent } from '../notifications/events';
+import { nowDate, toDateOnly, toDateString } from '../common/utils/date-utils';
 
 const LEAVE_CANCELLATION_REASON = 'إلغاء تلقائي بسبب إجازة طارئة للطبيب';
 
@@ -21,7 +22,7 @@ export class DoctorLeavesService {
     private readonly appointmentRepository: Repository<Appointment>,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+  ) { }
 
   async createLeave(
     userId: number,
@@ -31,7 +32,7 @@ export class DoctorLeavesService {
     const doctorProfileId = await this.resolveDoctorProfileId(userId, dto, isAdmin);
     this.validateLeaveTimes(dto.startTime, dto.endTime);
 
-    const exceptionDate = new Date(dto.exceptionDate);
+    const exceptionDate = toDateOnly(dto.exceptionDate);
 
     const result = await this.dataSource.transaction(async (manager) => {
       const leaveRepository = manager.getRepository(DoctorLeave);
@@ -80,7 +81,7 @@ export class DoctorLeavesService {
       for (const appointment of impactedAppointments) {
         appointment.status = 'cancelled';
         appointment.cancellationReason = LEAVE_CANCELLATION_REASON;
-        appointment.cancelledAt = new Date();
+        appointment.cancelledAt = nowDate();
         await appointmentRepository.save(appointment);
 
         if (appointment.patient?.userId) {
@@ -88,7 +89,7 @@ export class DoctorLeavesService {
             new AppointmentCancelledEvent({
               userId: appointment.patient.userId,
               appointmentId: appointment.id,
-              exceptionDate: dto.exceptionDate,
+              exceptionDate: toDateString(exceptionDate),
               doctorName: appointment.doctor?.user
                 ? `${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName ?? ''}`.trim()
                 : null,
