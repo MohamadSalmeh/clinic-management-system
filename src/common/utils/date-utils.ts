@@ -84,3 +84,36 @@ export function addDays(date: Date | string, days: number): Date {
 export function nowDate(): Date {
   return new Date();
 }
+
+/**
+ * حساب الفرق بالأيام (موقعة) بين تاريخين
+ */
+export function daysDiff(date1: Date | string, date2: Date | string): number {
+  const d1 = toDateOnly(date1);
+  const d2 = toDateOnly(date2);
+  return Math.round((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * إضافة عدد من الدقائق إلى تاريخ
+ */
+export function addMinutes(date: Date | string, minutes: number): Date {
+  const d = typeof date === 'string' ? new Date(date) : new Date(date);
+  d.setMinutes(d.getMinutes() + minutes);
+  return d;
+}
+
+/**
+ * مقارنات منطقية
+ */
+export function isBefore(date1: Date | string, date2: Date | string): boolean {
+  return new Date(date1).getTime() < new Date(date2).getTime();
+}
+
+export function isAfter(date1: Date | string, date2: Date | string): boolean {
+  return new Date(date1).getTime() > new Date(date2).getTime();
+}
+
+export function isSameOrBefore(date1: Date | string, date2: Date | string): boolean {
+  return new Date(date1).getTime() <= new Date(date2).getTime();
+}

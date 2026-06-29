@@ -7,6 +7,50 @@
     "title": "تم إلغاء الموعد",
     "body": "تم إلغاء موعدك بتاريخ {exceptionDate}. الدكتور: {doctorName}. العيادة: {clinicName}."
   },
+  "notifications.wallet.top_up": {
+    "title": "تم شحن المحفظة",
+    "body": "تم شحن محفظتك بمبلغ {amount}. الرصيد الجديد: {balanceAfter}."
+  },
+  "notifications.medical_history.created": {
+    "title": "تم إنشاء السجل الطبي",
+    "body": "تم إنشاء سجل طبي للموعد رقم {appointmentId}."
+  },
+  "notifications.medicines.prescribed": {
+    "title": "تم وصف دواء",
+    "body": "تم وصف الدواء {medicineName}."
+  },
+  "notifications.attachments.uploaded": {
+    "title": "تم رفع مرفق طبي",
+    "body": "تم رفع {count} مرفق/مرفقات طبية من نوع {source}."
+  },
+  "notifications.ratings.new_rating": {
+    "title": "تمت إضافة تقييم جديد",
+    "body": "تم إرسال تقييم جديد بقيمة {score} نجوم."
+  },
+  "notifications.appointments.completed": {
+    "title": "تم إكمال الموعد",
+    "body": "تمت معالجة موعدك في {clinicName} بنجاح."
+  },
+  "notifications.violations.suspended": {
+    "title": "تم تعليق الحساب",
+    "body": "تم تعليق حسابك بعد {noShowCount} مرات عدم حضور."
+  },
+  "notifications.wallet.frozen": {
+    "title": "تم تجميد مبلغ من المحفظة",
+    "body": "تم تجميد مبلغ {amount} للموعد رقم {appointmentId}."
+  },
+  "notifications.wallet.refund": {
+    "title": "تم تنفيذ الاسترداد",
+    "body": "تم استرداد مبلغ {amount} للموعد رقم {appointmentId}."
+  },
+  "notifications.referrals.consumed": {
+    "title": "تم استخدام التحويل الطبي",
+    "body": "تم استخدام التحويل الطبي رقم {referralId} للموعد رقم {appointmentId}."
+  },
+  "notifications.appointments.no_show": {
+    "title": "تم تسجيل الموعد كعدم حضور",
+    "body": "تم تسجيل موعدك كعدم حضور."
+  },
   "referral.expiring_soon": {
     "title": "تحويل طبي يقترب من الانتهاء",
     "body": "تحويلك الطبي إلى {clinicName} {doctorName} سينتهي بتاريخ {expiresAt}."

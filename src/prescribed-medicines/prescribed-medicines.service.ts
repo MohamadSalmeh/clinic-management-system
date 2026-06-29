@@ -4,6 +4,7 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
@@ -19,6 +20,7 @@ import { AppointmentAccessService } from '../appointment-access/appointment-acce
 import { ActiveUserData } from '../utils';
 import { CreatePrescribedMedicineDto } from './dto/create-prescribed-medicine.dto';
 import { UpdateMedicineStatusDto } from './dto/update-medicine-status.dto';
+import { MedicinePrescribedEvent } from '../notifications/events';
 
 @Injectable()
 export class PrescribedMedicinesService {
@@ -44,6 +46,7 @@ export class PrescribedMedicinesService {
         private readonly patientRepository: Repository<PatientProfile>,
 
         private readonly appointmentAccessService: AppointmentAccessService,
+        private readonly eventEmitter: EventEmitter2,
 
     ) { }
     async createHistoryMedicine(
@@ -72,6 +75,7 @@ export class PrescribedMedicinesService {
             null,
             currentUser.sub,
             dto,
+            history.appointmentId,
         );
     }
 
@@ -102,6 +106,7 @@ export class PrescribedMedicinesService {
             medicalProfile.id,
             currentUser.sub,
             dto,
+            appointmentId,
         );
     }
 
@@ -135,6 +140,7 @@ export class PrescribedMedicinesService {
             medicalProfile.id,
             currentUser.sub,
             dto,
+            null,
         );
     }
     private async createMedicine(
@@ -142,6 +148,7 @@ export class PrescribedMedicinesService {
         medicalProfileId: number | null,
         userId: number,
         dto: CreatePrescribedMedicineDto,
+        appointmentId: number | null,
     ): Promise<PrescribedMedicine> {
         console.log('medicalHistoryId =', medicalHistoryId);
         const medicine = this.medicineRepository.create({
@@ -169,7 +176,94 @@ export class PrescribedMedicinesService {
             notes: dto.notes ?? null,
         });
         console.log(medicine);
-        return this.medicineRepository.save(medicine);
+        const savedMedicine = await this.medicineRepository.save(medicine);
+
+        const recipientUserId = await this.resolveMedicineRecipientUserId(
+            userId,
+            medicalHistoryId,
+            medicalProfileId,
+            appointmentId,
+        );
+
+        if (recipientUserId !== null) {
+            await this.eventEmitter.emitAsync(
+                MedicinePrescribedEvent.eventName,
+                new MedicinePrescribedEvent({
+                    userId: recipientUserId,
+                    medicineId: savedMedicine.id,
+                    medicineName: savedMedicine.medicineName,
+                    medicalHistoryId: savedMedicine.medicalHistoryId,
+                    appointmentId,
+                }),
+            );
+        }
+
+        return savedMedicine;
+    }
+
+    private async resolveMedicineRecipientUserId(
+        actorUserId: number,
+        medicalHistoryId: number | null,
+        medicalProfileId: number | null,
+        appointmentId: number | null,
+    ): Promise<number | null> {
+        if (medicalHistoryId !== null) {
+            const history = await this.medicalHistoryRepository.findOne({
+                where: { id: medicalHistoryId },
+            });
+
+            if (!history) {
+                return null;
+            }
+
+            const appointment = await this.appointmentRepository.findOne({
+                where: { id: history.appointmentId },
+            });
+
+            if (!appointment) {
+                return null;
+            }
+
+            const patient = await this.patientRepository.findOne({
+                where: { id: appointment.patientId },
+            });
+
+            return patient?.userId ?? null;
+        }
+
+        if (appointmentId !== null) {
+            const appointment = await this.appointmentRepository.findOne({
+                where: { id: appointmentId },
+            });
+
+            if (!appointment) {
+                return null;
+            }
+
+            const patient = await this.patientRepository.findOne({
+                where: { id: appointment.patientId },
+            });
+
+            return patient?.userId ?? null;
+        }
+
+        if (medicalProfileId !== null) {
+            const profile = await this.medicalProfileRepository.findOne({
+                where: { id: medicalProfileId },
+            });
+
+            if (!profile) {
+                return actorUserId;
+            }
+
+            const patient = await this.patientRepository.findOne({
+                where: { id: profile.patientProfileId },
+            });
+
+            return patient?.userId ?? actorUserId;
+        }
+
+        return actorUserId;
     }
 
     async getMyMedicines(

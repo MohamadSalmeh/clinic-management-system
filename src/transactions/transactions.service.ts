@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { InjectRepository } from '@nestjs/typeorm';
 
@@ -15,6 +16,7 @@ import { TopUpDto } from './dto/top-up.dto';
 
 import { TransactionMethod } from './enums/transaction-method.enum';
 import { TransactionStatus } from './enums/transaction-status.enum';
+import { WalletTopUpEvent } from '../notifications/events';
 
 @Injectable()
 export class TransactionsService {
@@ -24,6 +26,7 @@ export class TransactionsService {
 
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async topUp(userId: number, dto: TopUpDto) {
@@ -57,7 +60,18 @@ export class TransactionsService {
       cardLast4: dto.cardNumber.slice(-4),
     });
 
-    await this.transactionRepository.save(transaction);
+    const savedTransaction = await this.transactionRepository.save(transaction);
+
+    await this.eventEmitter.emitAsync(
+      WalletTopUpEvent.eventName,
+      new WalletTopUpEvent({
+        userId,
+        walletId: wallet.id,
+        transactionId: savedTransaction.id,
+        amount: savedTransaction.amount,
+        balanceAfter: wallet.availableBalance,
+      }),
+    );
 
     return wallet;
   }
