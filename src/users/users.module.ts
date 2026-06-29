@@ -7,15 +7,17 @@ import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { UserAccessProvider } from './providers';
 import { JwtModule } from '@nestjs/jwt';
+import { FileStorageModule } from '../file-storage/file-storage.module';
 
 @Module({
   imports: [
     JwtModule,
     TypeOrmModule.forFeature([User, PatientProfile]),
     forwardRef(() => AuthModule),
+    FileStorageModule
   ],
   controllers: [UsersController],
   providers: [UsersService, UserAccessProvider],
   exports: [TypeOrmModule, UsersService, UserAccessProvider],
 })
-export class UsersModule {}
+export class UsersModule { }

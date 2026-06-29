@@ -7,6 +7,9 @@ import { User } from './entities/user.entity';
 import { UpdateUserDto } from './dto';
 import { UserAccessProvider } from './providers';
 import { AuthService } from '../auth';
+import { FileStorageService } from '../file-storage/file-storage.service';
+import * as path from 'path';
+import { Response } from 'express';
 
 @Injectable()
 export class UsersService {
@@ -16,6 +19,7 @@ export class UsersService {
     @InjectRepository(PatientProfile)
     private readonly patientProfileRepository: Repository<PatientProfile>,
     private readonly userAccessProvider: UserAccessProvider,
+    private readonly fileStorageService: FileStorageService,
   ) { }
 
   async findAll(): Promise<User[]> {
@@ -114,5 +118,83 @@ export class UsersService {
     // أو يمكنك إنشاء بروفايل فارغ إذا أردت ذلك تقنياً:
     // console.warn(`Notice: User ${user.id} is a PATIENT but has no PatientProfile yet.`);
   }
-  
+  async updateAvatar(
+    userId: number,
+    file: Express.Multer.File,
+  ): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.avatarUrl) {
+      await this.fileStorageService.deleteFile(user.avatarUrl);
+    }
+
+    const avatarPath = await this.fileStorageService.saveFile(
+      file,
+      'avatars',
+    );
+
+    user.avatarUrl = avatarPath;
+
+    await this.userRepository.save(user);
+
+    return this.findOne(user.id);
+  }
+  async removeAvatar(
+    userId: number,
+  ): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.avatarUrl) {
+      throw new NotFoundException('Profile image not found');
+    }
+    if (this.fileStorageService.fileExists(user.avatarUrl)) {
+      await this.fileStorageService.deleteFile(user.avatarUrl);
+    }
+    await this.fileStorageService.deleteFile(user.avatarUrl);
+
+    user.avatarUrl = null;
+
+    await this.userRepository.save(user);
+
+    return {
+      message: 'Profile image removed successfully.',
+    };
+  }
+  async getMyAvatar(
+    userId: number,
+    response: Response,
+  ): Promise<void> {
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.avatarUrl) {
+      throw new NotFoundException('Profile image not found');
+    }
+    response.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      Pragma: 'no-cache',
+      Expires: '0',
+    });
+
+    return response.sendFile(path.resolve(user.avatarUrl));
+  }
+
 }

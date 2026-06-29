@@ -6,7 +6,7 @@ import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.
 import { Rating } from '../../ratings/entities/rating.entity';
 import { Referral } from '../../referrals/entities/referral.entity';
 import { Column, Entity, Index, JoinColumn, OneToMany, OneToOne } from 'typeorm';
-
+import { FavoriteDoctor } from '../../favorite-doctors/entities/favorite-doctor.entity';
 @Entity({ name: 'patient_profiles' })
 export class PatientProfile extends BaseEntity {
   @Index()
@@ -50,4 +50,9 @@ export class PatientProfile extends BaseEntity {
     default: 0,
   })
   noShowCount!: number | null;
+  @OneToMany(
+    () => FavoriteDoctor,
+    (favorite) => favorite.patient,
+  )
+  favoriteDoctors!: FavoriteDoctor[];
 }
