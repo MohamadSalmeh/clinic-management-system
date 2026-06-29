@@ -6,6 +6,8 @@ import { PatientProfile } from '../patients/entities/patient-profile.entity';
 import { MedicalProfile } from '../medical-profiles/entities/medical-profile.entity';
 import { MedicalProfileLogQueryDto } from './dto';
 import { UserRole } from '../users/enums/user-role.enum';
+import { ActiveUserData } from '../utils';
+import { AppointmentAccessService } from '../appointment-access/appointment-access.service';
 
 export type MedicalProfileLogResponse = {
     id: number;
@@ -31,6 +33,7 @@ export class MedicalProfileLogsService {
         private readonly patientProfileRepository: Repository<PatientProfile>,
         @InjectRepository(MedicalProfile)
         private readonly medicalProfileRepository: Repository<MedicalProfile>,
+        private readonly appointmentAccessService: AppointmentAccessService,
     ) { }
 
     async getLogsForCurrentPatient(
@@ -146,5 +149,25 @@ export class MedicalProfileLogsService {
                 fullName: log.user.fullName,
             },
         };
+    }
+    async getByAppointment(
+        appointmentId: number,
+        currentUser: ActiveUserData,
+    ): Promise<MedicalProfileLog[]> {
+
+        const medicalProfile =
+            await this.appointmentAccessService.getMedicalProfileByAppointment(
+                appointmentId,
+                currentUser.sub,
+            );
+
+        return this.medicalProfileLogRepository.find({
+            where: {
+                medicalProfileId: medicalProfile.id,
+            },
+            order: {
+                created_at: 'DESC',
+            },
+        });
     }
 }

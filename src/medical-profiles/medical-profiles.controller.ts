@@ -2,15 +2,20 @@ import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthRolesGuard, VerifiedGuard } from '../auth/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
-import { MedicalProfileCompletionStatus, MedicalProfilesService, MedicalProfileResponse } from './medical-profiles.service';
+import {
+  MedicalProfileCompletionStatus,
+  MedicalProfilesService,
+  MedicalProfileResponse,
+} from './medical-profiles.service';
 import { CreateMedicalProfileDto, UpdateMedicalProfileDto } from './dto';
 import { MedicalProfile } from './entities/medical-profile.entity';
+import { Param, ParseIntPipe } from '@nestjs/common';
 @Controller('medical-profiles')
 @UseGuards(AuthRolesGuard, VerifiedGuard)
 export class MedicalProfilesController {
   constructor(
     private readonly medicalProfilesService: MedicalProfilesService,
-  ) {}
+  ) { }
 
   @Post()
   @Roles(UserRole.PATIENT)
@@ -35,7 +40,10 @@ export class MedicalProfilesController {
     @Body() dto: UpdateMedicalProfileDto,
     @CurrentUser() currentUser: ActiveUserData,
   ): Promise<MedicalProfileResponse> {
-    return this.medicalProfilesService.updateCurrentProfile(currentUser.sub, dto);
+    return this.medicalProfilesService.updateCurrentProfile(
+      currentUser.sub,
+      dto,
+    );
   }
 
   @Get('completion')
@@ -45,6 +53,37 @@ export class MedicalProfilesController {
   ): Promise<MedicalProfileCompletionStatus> {
     return this.medicalProfilesService.getCompletionStatus(currentUser.sub);
   }
+  @Patch('appointment/:appointmentId')
+  @Roles(UserRole.DOCTOR)
+  async updateMedicalProfileByAppointment(
+    @Param('appointmentId', ParseIntPipe)
+    appointmentId: number,
 
+    @Body()
+    dto: UpdateMedicalProfileDto,
+
+    @CurrentUser()
+    currentUser: ActiveUserData,
+  ): Promise<MedicalProfileResponse> {
+    return this.medicalProfilesService.updateByAppointment(
+      appointmentId,
+      currentUser,
+      dto,
+    );
+  }
+  @Get('appointment/:appointmentId')
+  @Roles(UserRole.DOCTOR)
+  async getMedicalProfileByAppointment(
+    @Param('appointmentId', ParseIntPipe)
+    appointmentId: number,
+
+    @CurrentUser()
+    currentUser: ActiveUserData,
+  ): Promise<MedicalProfileResponse> {
+    return this.medicalProfilesService.getByAppointment(
+      appointmentId,
+      currentUser,
+    );
+  }
 
 }

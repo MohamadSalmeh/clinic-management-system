@@ -6,6 +6,7 @@ import { MedicalProfileLogsService } from './medical-profile-logs.service';
 import { PatientProfile } from '../patients/entities/patient-profile.entity';
 import { MedicalProfile } from '../medical-profiles/entities/medical-profile.entity';
 import { AuthModule } from '../auth';
+import { AppointmentAccessModule } from '../appointment-access/appointment-access.module';
 
 @Module({
   imports: [
@@ -14,10 +15,11 @@ import { AuthModule } from '../auth';
       PatientProfile,
       MedicalProfile,
     ]),
+    AppointmentAccessModule,
     forwardRef(() => AuthModule),
   ],
   controllers: [MedicalProfileLogsController],
   providers: [MedicalProfileLogsService],
   exports: [TypeOrmModule, MedicalProfileLogsService],
 })
-export class MedicalProfileLogsModule {}
+export class MedicalProfileLogsModule { }

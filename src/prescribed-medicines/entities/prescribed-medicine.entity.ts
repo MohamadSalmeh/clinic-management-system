@@ -1,4 +1,5 @@
 import {
+  Check,
   Column,
   Entity,
   Index,
@@ -12,19 +13,32 @@ import { MedicalHistory } from '../../medical-histories/entities/medical-history
 import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
 import { User } from '../../users/entities/user.entity';
 
+
+@Check(`
+(
+    ("medical_history_id" IS NOT NULL AND "medical_profile_id" IS NULL)
+    OR
+    ("medical_history_id" IS NULL AND "medical_profile_id" IS NOT NULL)
+)
+`)
 @Entity({ name: 'prescribed_medicines' })
 export class PrescribedMedicine extends BaseEntity {
-  @Index()
-  @Column({ name: 'medical_profile_id', type: 'bigint' })
-  medicalProfileId!: number;
 
   @Index()
-  @Column({ 
-    name: 'medical_history_id', 
+  @Column({
+    name: 'medical_profile_id',
     type: 'bigint',
-    transformer: new ColumnNumericTransformer() 
+    nullable: true,
   })
-  medicalHistoryId!: number;
+  medicalProfileId!: number | null;
+
+  @Column({
+    name: 'medical_history_id',
+    type: 'bigint',
+    nullable: true,
+    transformer: new ColumnNumericTransformer(),
+  })
+  medicalHistoryId!: number | null;
 
   @Index()
   @Column({ name: 'user_id', type: 'bigint' })
@@ -59,9 +73,16 @@ export class PrescribedMedicine extends BaseEntity {
   @JoinColumn({ name: 'medical_profile_id' })
   medicalProfile!: MedicalProfile;
 
-  @ManyToOne(() => MedicalHistory, (history) => history.medicines, { onDelete: 'CASCADE' })
+  @ManyToOne(
+    () => MedicalHistory,
+    (history) => history.medicines,
+    {
+      onDelete: 'CASCADE',
+      nullable: true,
+    },
+  )
   @JoinColumn({ name: 'medical_history_id' })
-  medicalHistory!: MedicalHistory;
+  medicalHistory!: MedicalHistory | null;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
