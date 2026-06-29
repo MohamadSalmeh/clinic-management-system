@@ -1,0 +1,62 @@
+{
+  "appointment.booked": {
+    "title": "تم حجز الموعد بنجاح",
+    "body": "تم تأكيد موعدك بتاريخ {requestedDate} من {startTime} إلى {endTime} في {clinicName} مع الدكتور {doctorName}."
+  },
+  "appointment.cancelled": {
+    "title": "تم إلغاء الموعد",
+    "body": "تم إلغاء موعدك بتاريخ {exceptionDate}. الدكتور: {doctorName}. العيادة: {clinicName}."
+  },
+  "referral.expiring_soon": {
+    "title": "تحويل طبي يقترب من الانتهاء",
+    "body": "تحويلك الطبي إلى {clinicName} {doctorName} سينتهي بتاريخ {expiresAt}."
+  },
+  "referral.cancelled": {
+    "title": "تم إلغاء التحويل الطبي",
+    "body": "تم إلغاء التحويل الطبي رقم {referralId}."
+  },
+  "referral.created": {
+    "title": "تم إنشاء تحويل طبي جديد",
+    "body": "تم إنشاء تحويل طبي جديد لك ينتهي بتاريخ {expiresAt}."
+  },
+  "schedule.request_approved": {
+    "title": "تمت الموافقة على طلب الجدول",
+    "body": "تمت الموافقة على طلب تعديل جدولك الطبي بنجاح."
+  },
+  "schedule.request_rejected": {
+    "title": "تم رفض طلب الجدول",
+    "body": "تم رفض طلب تعديل جدولك الطبي."
+  },
+  "queue.patient_called": {
+    "title": "تم استدعاء المريض التالي",
+    "body": "تم استدعاؤك من قائمة الانتظار في عيادة {clinicName}."
+  },
+  "queue.consultation_completed": {
+    "title": "تم إنهاء المعاينة",
+    "body": "تمت معالجة زيارتك الطبية بنجاح."
+  },
+  "queue.patient_skipped": {
+    "title": "تم تجاوز دور المريض",
+    "body": "تم تجاوز دورك في قائمة الانتظار في عيادة {clinicName}."
+  },
+  "invitation.created": {
+    "title": "دعوة طبيب جديدة",
+    "body": "تمت دعوتك للانضمام إلى النظام. رابط التفعيل صالح حتى {expiresAt}."
+  },
+  "invitation.cancelled": {
+    "title": "تم إلغاء الدعوة",
+    "body": "تم إلغاء دعوتك السابقة للانضمام إلى النظام."
+  },
+  "invitation.rejected": {
+    "title": "تم رفض الدعوة",
+    "body": "تم رفض الدعوة الخاصة بحسابك."
+  },
+  "doctor.schedule.approved": {
+    "title": "تمت الموافقة على الجدول",
+    "body": "تم اعتماد الجدول الطبي الجديد بنجاح."
+  },
+  "doctor.schedule.rejected": {
+    "title": "تم رفض الجدول",
+    "body": "تم رفض طلب تعديل الجدول الطبي."
+  }
+}

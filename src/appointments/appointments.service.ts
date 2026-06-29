@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
@@ -52,6 +53,7 @@ import {
   Referral,
   ReferralStatus,
 } from '../referrals/entities/referral.entity';
+import { AppointmentBookedEvent, AppointmentCancelledEvent } from '../notifications/events';
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -96,6 +98,7 @@ export class AppointmentsService {
 
     @Inject(forwardRef(() => ReferralsService))
     private readonly referralsService: ReferralsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
   async createAppointment(
     userId: number,
@@ -169,7 +172,7 @@ export class AppointmentsService {
       dto.endTime,
     );
 
-    return this.dataSource.transaction(async (manager) => {
+    const appointment = await this.dataSource.transaction(async (manager) => {
       const walletRepository = manager.getRepository(Wallet);
 
       const wallet = await walletRepository.findOne({
@@ -269,6 +272,21 @@ export class AppointmentsService {
 
       return appointment;
     });
+
+    await this.eventEmitter.emitAsync(
+      AppointmentBookedEvent.eventName,
+      new AppointmentBookedEvent({
+        userId,
+        appointmentId: appointment.id,
+        requestedDate: appointment.requestedDate.toISOString().slice(0, 10),
+        startTime: appointment.startTime,
+        endTime: appointment.endTime,
+        doctorName: null,
+        clinicName: clinic.name,
+      }),
+    );
+
+    return appointment;
   }
 
   async getMyAppointments(
@@ -441,7 +459,7 @@ export class AppointmentsService {
     if (appointment.status === 'cancelled') {
       throw new BadRequestException('Appointment is already cancelled');
     }
-    return this.dataSource.transaction(async (manager) => {
+    const updatedAppointment = await this.dataSource.transaction(async (manager) => {
       const appointmentRepo = manager.getRepository(Appointment);
 
       const paymentRepo = manager.getRepository(Payment);
@@ -572,6 +590,19 @@ export class AppointmentsService {
 
       return appointmentRepo.save(appointment);
     });
+
+    await this.eventEmitter.emitAsync(
+      AppointmentCancelledEvent.eventName,
+      new AppointmentCancelledEvent({
+        userId: appointment.patient.userId,
+        appointmentId: updatedAppointment.id,
+        exceptionDate: updatedAppointment.requestedDate.toISOString().slice(0, 10),
+        doctorName: null,
+        clinicName: appointment.clinic?.name ?? null,
+      }),
+    );
+
+    return updatedAppointment;
   }
   async checkInAppointment(
     id: number,

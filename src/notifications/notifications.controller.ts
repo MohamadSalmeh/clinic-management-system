@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseIntPipe, Patch, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, Param, ParseIntPipe, Patch, UseGuards } from '@nestjs/common';
 import { AuthRolesGuard } from '../auth/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
@@ -14,8 +14,12 @@ export class NotificationsController {
   @Get('me')
   async getNotificationsForUser(
     @CurrentUser() user: ActiveUserData,
-  ): Promise<Notification[]> {
-    return this.notificationsService.getNotificationsForUser(Number(user.sub));
+    @Headers('accept-language') acceptLanguage?: string,
+  ): Promise<Array<Notification & { title: string; body: string }>> {
+    return this.notificationsService.getNotificationsForUser(
+      Number(user.sub),
+      acceptLanguage,
+    );
   }
 
   @Patch(':id/read')

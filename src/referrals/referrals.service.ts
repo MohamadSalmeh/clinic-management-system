@@ -8,6 +8,7 @@ import {
   forwardRef,
   Logger,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -31,6 +32,7 @@ import { addDays, endOfDay, nowDate } from '../common/utils/date-utils';
 import { DoctorClinic } from '../doctor-clinics/entities/doctor-clinic.entity';
 import { SystemSetting } from '../system-setting/entities/system-setting.entity';
 import { CancelReferralDto } from './dto/cancel-referral.dto';
+import { ReferralCreatedEvent, ReferralCancelledEvent, ReferralExpiringEvent } from '../notifications/events';
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -58,6 +60,7 @@ export class ReferralsService {
     private readonly appointmentsService: AppointmentsService,
 
     private readonly dataSource: DataSource,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ==========================================
@@ -154,7 +157,12 @@ export class ReferralsService {
 
     const result = await this.referralRepository.findOne({
       where: { id: savedReferral.id },
-      relations: ['patient', 'fromDoctor', 'toDoctor', 'toClinic'],
+      relations: {
+        patient: true,
+        fromDoctor: { user: true },
+        toDoctor: { user: true },
+        toClinic: true,
+      },
     });
 
     if (!result) {
@@ -162,6 +170,19 @@ export class ReferralsService {
         'Referral could not be retrieved after saving',
       );
     }
+
+    await this.eventEmitter.emitAsync(
+      ReferralCreatedEvent.eventName,
+      new ReferralCreatedEvent({
+        userId: patient.userId,
+        referralId: result.id,
+        expiresAt: result.expiresAt?.toISOString() ?? null,
+        doctorName: result.toDoctor?.user
+          ? `${result.toDoctor.user.firstName} ${result.toDoctor.user.lastName ?? ''}`.trim()
+          : null,
+        clinicName: result.toClinic?.name ?? null,
+      }),
+    );
 
     return result;
   }
@@ -396,7 +417,10 @@ export class ReferralsService {
     dto: CancelReferralDto,
   ): Promise<Referral> {
     // 1. جلب كرت التحويل للتأكد من وجوده
-    const referral = await this.referralRepository.findOne({ where: { id } });
+    const referral = await this.referralRepository.findOne({
+      where: { id },
+      relations: ['patient'],
+    });
     if (!referral) {
       throw new NotFoundException('Referral not found');
     }
@@ -419,7 +443,19 @@ export class ReferralsService {
     referral.cancelledAt = nowDate(); // استخدام مصدر الوقت الموحد للمشروع
 
     // 4. حفظ وإعادة الكيان المحدث
-    return await this.referralRepository.save(referral);
+    const updatedReferral = await this.referralRepository.save(referral);
+
+    if (referral.patient?.userId) {
+      await this.eventEmitter.emitAsync(
+        ReferralCancelledEvent.eventName,
+        new ReferralCancelledEvent({
+          userId: referral.patient.userId,
+          referralId: updatedReferral.id,
+        }),
+      );
+    }
+
+    return updatedReferral;
   }
 
   // ==========================================
@@ -568,11 +604,10 @@ export class ReferralsService {
     }
 
     logger.log(
-      `Found ${expiringReferrals.length} referrals expiring soon. Sending notifications...`,
+      `Found ${expiringReferrals.length} referrals expiring soon. Emitting events...`,
     );
 
     for (const referral of expiringReferrals) {
-      // [💡 استخدام الحل المتزامن المصلح لـ TypeScript العبقرية]
       try {
         const patientName = referral.patient?.user?.firstName || 'عزيزي المريض';
         const destination = referral.toClinic?.name
@@ -581,10 +616,21 @@ export class ReferralsService {
             ? `الدكتور ${referral.toDoctor.user.firstName}`
             : 'العيادة المختصة';
 
-        const message = `مرحباً ${patientName}، يرجى العلم أن تحويلك الطبي الصادر إلى (${destination}) سينتهي قريباً. اضغط هنا لجدولة موعدك ومتابعة خطتك العلاجية الآن قبل فوات الأوان.`;
+        await this.eventEmitter.emitAsync(
+          ReferralExpiringEvent.eventName,
+          new ReferralExpiringEvent({
+            userId: referral.patient.userId,
+            referralId: referral.id,
+            expiresAt: referral.expiresAt?.toISOString() ?? null,
+            doctorName: referral.toDoctor?.user
+              ? `${referral.toDoctor.user.firstName} ${referral.toDoctor.user.lastName ?? ''}`.trim()
+              : null,
+            clinicName: referral.toClinic?.name ?? null,
+          }),
+        );
 
         logger.log(
-          `Reminder notification sent successfully to patient ID: ${referral.patientId}`,
+          `Reminder event emitted successfully for patient ID: ${referral.patientId} (${patientName} -> ${destination})`,
         );
       } catch (error: unknown) {
         const { message, stack } = this.getErrorMessage(error);

@@ -31,6 +31,12 @@ export class Notification extends BaseEntity {
   @Column({ type: 'text' })
   body!: string;
 
+  @Column({ name: 'message_key', type: 'varchar', length: 255, nullable: true })
+  messageKey!: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  arguments!: Record<string, unknown> | null;
+
   @Column({ type: 'enum', enum: NotificationType })
   type!: NotificationType;
 

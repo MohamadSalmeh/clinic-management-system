@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Raw, Repository } from 'typeorm';
 import { DoctorLeave } from './entities/doctor-leaves.entity';
 import { CreateDoctorLeaveDto, DoctorLeaveQueryDto } from './dto';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { Appointment } from '../appointments/entities/appointment.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { AppointmentCancelledEvent } from '../notifications/events';
 
 const LEAVE_CANCELLATION_REASON = 'إلغاء تلقائي بسبب إجازة طارئة للطبيب';
 
@@ -19,7 +20,7 @@ export class DoctorLeavesService {
     @InjectRepository(Appointment)
     private readonly appointmentRepository: Repository<Appointment>,
     private readonly dataSource: DataSource,
-    private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async createLeave(
@@ -32,9 +33,10 @@ export class DoctorLeavesService {
 
     const exceptionDate = new Date(dto.exceptionDate);
 
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const leaveRepository = manager.getRepository(DoctorLeave);
       const appointmentRepository = manager.getRepository(Appointment);
+      const cancellationEvents: AppointmentCancelledEvent[] = [];
 
       const existingLeaves = await leaveRepository.find({
         where: {
@@ -63,7 +65,7 @@ export class DoctorLeavesService {
           status: 'confirmed',
           requestedDate: exceptionDate,
         },
-        relations: { patient: true },
+        relations: { patient: true, doctor: { user: true }, clinic: true },
       });
 
       const impactedAppointments = appointments.filter((appointment) =>
@@ -82,16 +84,34 @@ export class DoctorLeavesService {
         await appointmentRepository.save(appointment);
 
         if (appointment.patient?.userId) {
-          await this.notificationsService.notifyPatientAboutLeaveCancellation(
-            appointment.patient.userId,
-            appointment.id,
-            dto.exceptionDate,
+          cancellationEvents.push(
+            new AppointmentCancelledEvent({
+              userId: appointment.patient.userId,
+              appointmentId: appointment.id,
+              exceptionDate: dto.exceptionDate,
+              doctorName: appointment.doctor?.user
+                ? `${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName ?? ''}`.trim()
+                : null,
+              clinicName: appointment.clinic?.name ?? null,
+            }),
           );
         }
       }
 
-      return leaveRepository.save(leave);
+      return {
+        leave: await leaveRepository.save(leave),
+        cancellationEvents,
+      };
     });
+
+    for (const cancellationEvent of result.cancellationEvents) {
+      await this.eventEmitter.emitAsync(
+        AppointmentCancelledEvent.eventName,
+        cancellationEvent,
+      );
+    }
+
+    return result.leave;
   }
 
   async getLeavesForCurrentDoctor(userId: number): Promise<DoctorLeave[]> {
