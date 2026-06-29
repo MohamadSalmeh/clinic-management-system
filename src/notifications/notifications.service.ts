@@ -7,12 +7,14 @@ import { NotificationStatus } from './enums/notification-status.enum';
 import { NotificationType } from './enums/notification-type.enum';
 import { NotificationPriority } from './enums/notification-priority.enum';
 import { NotificationTargetType } from './enums/notification-target-type.enum';
+import { NotificationI18nService } from './i18n/notification-i18n.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
+    private readonly notificationI18nService: NotificationI18nService,
   ) {}
 
   async createNotification(dto: CreateNotificationDto): Promise<Notification> {
@@ -20,6 +22,8 @@ export class NotificationsService {
       userId: dto.userId,
       title: dto.title,
       body: dto.body,
+      messageKey: dto.messageKey ?? null,
+      arguments: dto.arguments ?? null,
       type: dto.type,
       priority: dto.priority,
       targetType: dto.targetType ?? null,
@@ -36,24 +40,42 @@ export class NotificationsService {
     appointmentId: number,
     exceptionDate: string,
   ): Promise<Notification> {
-    const notification = this.notificationRepository.create({
+    return this.createNotification({
       userId: patientUserId,
-      title: 'تنبيه طبي مهم: إلغاء موعد',
-      body: `عذراً عزيزي المريض، نود إعلامك بأن موعدك المحجوز بتاريخ ${exceptionDate} قد تم إلغاؤه تلقائياً بسبب إجازة طارئة وخارجة عن الإرادة للطبيب. يمكنك الدخول لإعادة الجدولة وحجز موعد آخر.`,
+      title: '',
+      body: '',
+      messageKey: 'appointment.cancelled',
+      arguments: {
+        appointmentId,
+        exceptionDate,
+      },
       type: NotificationType.APPOINTMENT,
       priority: NotificationPriority.HIGH,
       targetType: NotificationTargetType.APPOINTMENT,
       targetId: appointmentId,
-      status: NotificationStatus.PENDING,
     });
-
-    return this.notificationRepository.save(notification);
   }
 
-  async getNotificationsForUser(userId: number): Promise<Notification[]> {
-    return this.notificationRepository.find({
+  async getNotificationsForUser(
+    userId: number,
+    lang = 'en',
+  ): Promise<Array<Notification & { title: string; body: string }>> {
+    const notifications = await this.notificationRepository.find({
       where: { userId },
       order: { created_at: 'DESC' },
+    });
+
+    return notifications.map((notification) => {
+      const translated = this.notificationI18nService.translateNotification(
+        notification,
+        lang,
+      );
+
+      return {
+        ...notification,
+        title: translated.title,
+        body: translated.body,
+      };
     });
   }
 

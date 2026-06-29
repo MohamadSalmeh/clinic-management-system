@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AppService } from './app.service';
@@ -54,6 +55,7 @@ import { ScheduleModule } from '@nestjs/schedule';
         };
       },
     }),
+    EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     SystemSettingsModule,
     UsersModule,

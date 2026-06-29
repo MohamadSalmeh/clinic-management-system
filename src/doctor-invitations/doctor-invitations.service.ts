@@ -4,12 +4,14 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { DoctorInvitation } from './entities/doctor-invitation.entity';
 import { DoctorInvitationStatus } from './enums/doctor-invitation-status.enum';
+import { DoctorInvitationCancelledEvent, DoctorInvitationCreatedEvent, DoctorInvitationRejectedEvent } from '../notifications/events';
 
 const INVITATION_TTL_DAYS = parseInt(process.env.DOCTOR_INVITATION_TTL_DAYS || '7', 10);
 const TOKEN_GENERATION_MAX_ATTEMPTS = 3;
@@ -20,6 +22,7 @@ export class DoctorInvitationsService {
         @InjectRepository(DoctorInvitation)
         private readonly invitationRepository: Repository<DoctorInvitation>,
         private readonly mailService: MailService,
+        private readonly eventEmitter: EventEmitter2,
     ) { }
 
     async createInvitation(
@@ -50,6 +53,17 @@ export class DoctorInvitationsService {
         const savedInvitation = await this.invitationRepository.save(invitation);
         await this.sendInvitationEmail(savedInvitation);
 
+                if (invitedByAdminId) {
+                    await this.eventEmitter.emitAsync(
+                        DoctorInvitationCreatedEvent.eventName,
+                        new DoctorInvitationCreatedEvent({
+                            userId: invitedByAdminId,
+                            invitationId: savedInvitation.id,
+                            expiresAt: savedInvitation.expiresAt.toISOString(),
+                        }),
+                    );
+                }
+
         return savedInvitation;
     }
 
@@ -71,8 +85,19 @@ export class DoctorInvitationsService {
         }
 
         invitation.status = DoctorInvitationStatus.CANCELLED;
+                const updatedInvitation = await this.invitationRepository.save(invitation);
 
-        return this.invitationRepository.save(invitation);
+                if (updatedInvitation.invitedByAdminId) {
+                    await this.eventEmitter.emitAsync(
+                        DoctorInvitationCancelledEvent.eventName,
+                        new DoctorInvitationCancelledEvent({
+                            userId: updatedInvitation.invitedByAdminId,
+                            invitationId: updatedInvitation.id,
+                        }),
+                    );
+                }
+
+                return updatedInvitation;
     }
 
     async getValidInvitationByToken(token: string): Promise<DoctorInvitation> {
@@ -127,7 +152,19 @@ export class DoctorInvitationsService {
         }
 
         invitation.status = DoctorInvitationStatus.REJECTED;
-        return this.invitationRepository.save(invitation);
+                const updatedInvitation = await this.invitationRepository.save(invitation);
+
+                if (updatedInvitation.invitedByAdminId) {
+                    await this.eventEmitter.emitAsync(
+                        DoctorInvitationRejectedEvent.eventName,
+                        new DoctorInvitationRejectedEvent({
+                            userId: updatedInvitation.invitedByAdminId,
+                            invitationId: updatedInvitation.id,
+                        }),
+                    );
+                }
+
+                return updatedInvitation;
     }
 
     async sendInvitationEmail(invitation: DoctorInvitation): Promise<void> {

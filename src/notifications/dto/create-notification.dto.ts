@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { NotificationPriority } from '../enums/notification-priority.enum';
 import { NotificationTargetType } from '../enums/notification-target-type.enum';
 import { NotificationType } from '../enums/notification-type.enum';
@@ -15,6 +22,14 @@ export class CreateNotificationDto {
 
   @IsString()
   body!: string;
+
+  @IsOptional()
+  @IsString()
+  messageKey?: string;
+
+  @IsOptional()
+  @IsObject()
+  arguments?: Record<string, unknown>;
 
   @IsEnum(NotificationType)
   type!: NotificationType;

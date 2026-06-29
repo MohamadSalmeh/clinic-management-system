@@ -6,6 +6,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DataSource, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from './entities/queue.entity';
@@ -21,6 +22,7 @@ import { Wallet } from '../wallets/entities/wallet.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { SystemSettingsService } from '../system-setting/system-settings.service';
 import { SystemSetting } from '../system-setting/entities/system-setting.entity';
+import { QueueConsultationCompletedEvent, QueuePatientCalledEvent, QueuePatientSkippedEvent } from '../notifications/events';
 
 @Injectable()
 export class QueuesService {
@@ -50,6 +52,7 @@ export class QueuesService {
         
     @InjectRepository(SystemSetting)
     private readonly systemSettingRepository: Repository<SystemSetting>,
+    private readonly eventEmitter: EventEmitter2,
 
   ) { }
 
@@ -296,6 +299,9 @@ async callNextPatient(doctorUserId: number, clinicId: number): Promise<Queue> {
   // جلب أول مريض في الانتظار (صاحب أقل رقم دور اليوم)
   const nextQueueEntry = await this.queueRepository
     .createQueryBuilder('queue')
+    .leftJoinAndSelect('queue.appointment', 'appointment')
+    .leftJoinAndSelect('appointment.patient', 'patient')
+    .leftJoinAndSelect('queue.clinic', 'clinic')
     .where('queue.doctorId = :doctorId', { doctorId: doctorProfile.id })
     .andWhere('queue.clinicId = :clinicId', { clinicId })
     .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
@@ -309,7 +315,21 @@ async callNextPatient(doctorUserId: number, clinicId: number): Promise<Queue> {
 
   // تحديث حالة الطابور إلى جاري الاستدعاء فقط
   nextQueueEntry.status = QueueStatus.CALLING;
-  return await this.queueRepository.save(nextQueueEntry);
+  const updatedQueue = await this.queueRepository.save(nextQueueEntry);
+
+  if (updatedQueue.appointment?.patient?.userId) {
+    await this.eventEmitter.emitAsync(
+      QueuePatientCalledEvent.eventName,
+      new QueuePatientCalledEvent({
+        userId: updatedQueue.appointment.patient.userId,
+        appointmentId: updatedQueue.appointment.id,
+        queueId: updatedQueue.id,
+        clinicName: updatedQueue.clinic?.name ?? null,
+      }),
+    );
+  }
+
+  return updatedQueue;
 }
   
  async completeConsultation(
@@ -328,7 +348,7 @@ async callNextPatient(doctorUserId: number, clinicId: number): Promise<Queue> {
   // 2. جلب سجل الطابور مع الموعد المرتبط به بناءً على الـ queueId
   const queue = await this.queueRepository.findOne({
     where: { id: queueId },
-    relations: { appointment: true },
+    relations: { appointment: { patient: true }, clinic: true },
   });
 
   if (!queue) {
@@ -412,7 +432,21 @@ async callNextPatient(doctorUserId: number, clinicId: number): Promise<Queue> {
       actualDurationMinutes,
     );
 
-    return await transactionalQueueRepo.save(queue);
+    const updatedQueue = await transactionalQueueRepo.save(queue);
+
+    if (updatedQueue.appointment?.patient?.userId) {
+      await this.eventEmitter.emitAsync(
+        QueueConsultationCompletedEvent.eventName,
+        new QueueConsultationCompletedEvent({
+          userId: updatedQueue.appointment.patient.userId,
+          appointmentId: updatedQueue.appointment.id,
+          queueId: updatedQueue.id,
+          clinicName: queue.clinic?.name ?? null,
+        }),
+      );
+    }
+
+    return updatedQueue;
   });
 }
 
@@ -451,6 +485,7 @@ async skipPatient(
 ): Promise<Queue> {
   const queue = await this.queueRepository.findOne({
     where: { id: queueId },
+    relations: { appointment: { patient: true }, clinic: true },
   });
 
   if (!queue) {
@@ -468,7 +503,21 @@ async skipPatient(
   }
 
   queue.status = QueueStatus.SKIPPED;
-  return await this.queueRepository.save(queue);
+  const updatedQueue = await this.queueRepository.save(queue);
+
+  if (updatedQueue.appointment?.patient?.userId) {
+    await this.eventEmitter.emitAsync(
+      QueuePatientSkippedEvent.eventName,
+      new QueuePatientSkippedEvent({
+        userId: updatedQueue.appointment.patient.userId,
+        appointmentId: updatedQueue.appointment.id,
+        queueId: updatedQueue.id,
+        clinicName: queue.clinic?.name ?? null,
+      }),
+    );
+  }
+
+  return updatedQueue;
 }
   async reorderQueue(queueId: number, newPosition: number): Promise<Queue> {
     const queue = await this.queueRepository.findOne({

@@ -1,0 +1,62 @@
+{
+  "appointment.booked": {
+    "title": "Appointment booked successfully",
+    "body": "Your appointment on {requestedDate} from {startTime} to {endTime} at {clinicName} with Dr. {doctorName} has been confirmed."
+  },
+  "appointment.cancelled": {
+    "title": "Appointment cancelled",
+    "body": "Your appointment on {exceptionDate} has been cancelled. Doctor: {doctorName}. Clinic: {clinicName}."
+  },
+  "referral.expiring_soon": {
+    "title": "Referral expiring soon",
+    "body": "Your referral to {clinicName} {doctorName} will expire on {expiresAt}."
+  },
+  "referral.cancelled": {
+    "title": "Referral cancelled",
+    "body": "Referral #{referralId} has been cancelled."
+  },
+  "referral.created": {
+    "title": "New referral created",
+    "body": "A new referral has been created for you and expires on {expiresAt}."
+  },
+  "schedule.request_approved": {
+    "title": "Schedule request approved",
+    "body": "Your schedule update request has been approved."
+  },
+  "schedule.request_rejected": {
+    "title": "Schedule request rejected",
+    "body": "Your schedule update request has been rejected."
+  },
+  "queue.patient_called": {
+    "title": "Next patient called",
+    "body": "You have been called from the queue at {clinicName}."
+  },
+  "queue.consultation_completed": {
+    "title": "Consultation completed",
+    "body": "Your medical visit has been completed successfully."
+  },
+  "queue.patient_skipped": {
+    "title": "Queue position skipped",
+    "body": "Your queue position at {clinicName} has been skipped."
+  },
+  "invitation.created": {
+    "title": "New doctor invitation",
+    "body": "You were invited to join the system. The activation link is valid until {expiresAt}."
+  },
+  "invitation.cancelled": {
+    "title": "Invitation cancelled",
+    "body": "Your previous system invitation has been cancelled."
+  },
+  "invitation.rejected": {
+    "title": "Invitation rejected",
+    "body": "Your invitation has been rejected."
+  },
+  "doctor.schedule.approved": {
+    "title": "Schedule approved",
+    "body": "Your updated medical schedule has been approved."
+  },
+  "doctor.schedule.rejected": {
+    "title": "Schedule rejected",
+    "body": "Your schedule change request has been rejected."
+  }
+}

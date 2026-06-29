@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Not, Repository } from 'typeorm';
 import { Appointment } from '../appointments/entities/appointment.entity';
@@ -16,6 +17,7 @@ import {
 } from './entities/doctor-schedule-request.entity';
 import { DoctorAdminLogsService } from '../doctors/doctor-admin-logs.service';
 import { DoctorAdminLogType } from '../doctors/entities/doctor-admin-log.entity';
+import { DoctorScheduleRequestApprovedEvent, DoctorScheduleRequestRejectedEvent } from '../notifications/events';
 
 @Injectable()
 export class DoctorSchedulesService {
@@ -32,6 +34,7 @@ export class DoctorSchedulesService {
     private readonly appointmentRepository: Repository<Appointment>,
     private readonly dataSource: DataSource,
     private readonly doctorAdminLogsService: DoctorAdminLogsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async createOrUpdateWeeklyTemplate(
@@ -146,6 +149,20 @@ export class DoctorSchedulesService {
       request.adminNotes = adminNotes ?? null;
       await this.doctorScheduleRequestRepository.save(request);
 
+      const doctorProfile = await this.doctorProfileRepository.findOne({
+        where: { id: request.doctorProfileId },
+      });
+
+      if (doctorProfile?.userId) {
+        await this.eventEmitter.emitAsync(
+          DoctorScheduleRequestRejectedEvent.eventName,
+          new DoctorScheduleRequestRejectedEvent({
+            userId: doctorProfile.userId,
+            requestId,
+          }),
+        );
+      }
+
       return { message: 'Schedule request rejected.' };
     }
 
@@ -223,6 +240,20 @@ export class DoctorSchedulesService {
         JSON.stringify(newSchedulesSnapshot),
         adminUserId,
         request.notes ?? null,
+      );
+    }
+
+    const approvedDoctorProfile = await this.doctorProfileRepository.findOne({
+      where: { id: request.doctorProfileId },
+    });
+
+    if (approvedDoctorProfile?.userId) {
+      await this.eventEmitter.emitAsync(
+        DoctorScheduleRequestApprovedEvent.eventName,
+        new DoctorScheduleRequestApprovedEvent({
+          userId: approvedDoctorProfile.userId,
+          requestId,
+        }),
       );
     }
 
