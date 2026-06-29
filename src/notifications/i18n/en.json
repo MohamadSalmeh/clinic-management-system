@@ -7,6 +7,50 @@
     "title": "Appointment cancelled",
     "body": "Your appointment on {exceptionDate} has been cancelled. Doctor: {doctorName}. Clinic: {clinicName}."
   },
+  "notifications.wallet.top_up": {
+    "title": "Wallet topped up",
+    "body": "Your wallet was topped up with {amount}. New balance: {balanceAfter}."
+  },
+  "notifications.medical_history.created": {
+    "title": "Medical history created",
+    "body": "A medical history record was created for appointment {appointmentId}."
+  },
+  "notifications.medicines.prescribed": {
+    "title": "Medicine prescribed",
+    "body": "{medicineName} has been prescribed."
+  },
+  "notifications.attachments.uploaded": {
+    "title": "Attachment uploaded",
+    "body": "{count} medical attachment(s) were uploaded from {source}."
+  },
+  "notifications.ratings.new_rating": {
+    "title": "New doctor rating",
+    "body": "A new rating of {score} stars was submitted."
+  },
+  "notifications.appointments.completed": {
+    "title": "Appointment completed",
+    "body": "Your appointment at {clinicName} has been completed."
+  },
+  "notifications.violations.suspended": {
+    "title": "Account suspended",
+    "body": "Your account was suspended after {noShowCount} missed appointments."
+  },
+  "notifications.wallet.frozen": {
+    "title": "Wallet amount frozen",
+    "body": "An amount of {amount} was frozen for appointment {appointmentId}."
+  },
+  "notifications.wallet.refund": {
+    "title": "Wallet refund processed",
+    "body": "A refund of {amount} was processed for appointment {appointmentId}."
+  },
+  "notifications.referrals.consumed": {
+    "title": "Referral consumed",
+    "body": "Your referral #{referralId} was used for appointment {appointmentId}."
+  },
+  "notifications.appointments.no_show": {
+    "title": "Appointment marked as no-show",
+    "body": "Your appointment was marked as no-show."
+  },
   "referral.expiring_soon": {
     "title": "Referral expiring soon",
     "body": "Your referral to {clinicName} {doctorName} will expire on {expiresAt}."

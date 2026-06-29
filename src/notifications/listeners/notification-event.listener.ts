@@ -10,6 +10,13 @@ import { NotificationType } from '../enums/notification-type.enum';
 import {
   AppointmentBookedEvent,
   AppointmentCancelledEvent,
+  AppointmentCompletedEvent,
+  AppointmentNoShowEvent,
+  DoctorRatedEvent,
+  MedicalAttachmentUploadedEvent,
+  MedicalHistoryCreatedEvent,
+  MedicinePrescribedEvent,
+  PatientSuspendedEvent,
   ReferralCreatedEvent,
   DoctorInvitationCancelledEvent,
   DoctorInvitationCreatedEvent,
@@ -19,8 +26,11 @@ import {
   QueueConsultationCompletedEvent,
   QueuePatientCalledEvent,
   QueuePatientSkippedEvent,
+  ReferralConsumedEvent,
   ReferralCancelledEvent,
   ReferralExpiringEvent,
+  WalletTopUpEvent,
+  WalletTransactionEvent,
 } from '../events';
 
 @Injectable()
@@ -51,6 +61,147 @@ export class NotificationEventListener {
       userId: event.payload.userId,
       messageKey: AppointmentBookedEvent.eventName,
       arguments: event.payload as unknown as Record<string, unknown>,
+      type: NotificationType.APPOINTMENT,
+      targetType: NotificationTargetType.APPOINTMENT,
+      targetId: event.payload.appointmentId,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(WalletTopUpEvent.eventName)
+  async handleWalletTopUp(event: WalletTopUpEvent): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: WalletTopUpEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.SYSTEM,
+      targetType: null,
+      targetId: null,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(MedicalHistoryCreatedEvent.eventName)
+  async handleMedicalHistoryCreated(
+    event: MedicalHistoryCreatedEvent,
+  ): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: MedicalHistoryCreatedEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.SYSTEM,
+      targetType: null,
+      targetId: null,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(MedicinePrescribedEvent.eventName)
+  async handleMedicinePrescribed(event: MedicinePrescribedEvent): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: MedicinePrescribedEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.SYSTEM,
+      targetType: null,
+      targetId: null,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(MedicalAttachmentUploadedEvent.eventName)
+  async handleMedicalAttachmentUploaded(
+    event: MedicalAttachmentUploadedEvent,
+  ): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: MedicalAttachmentUploadedEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.SYSTEM,
+      targetType: null,
+      targetId: null,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(DoctorRatedEvent.eventName)
+  async handleDoctorRated(event: DoctorRatedEvent): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: DoctorRatedEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.SYSTEM,
+      targetType: null,
+      targetId: null,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(AppointmentCompletedEvent.eventName)
+  async handleAppointmentCompleted(
+    event: AppointmentCompletedEvent,
+  ): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: AppointmentCompletedEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.APPOINTMENT,
+      targetType: NotificationTargetType.APPOINTMENT,
+      targetId: event.payload.appointmentId,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(PatientSuspendedEvent.eventName)
+  async handlePatientSuspended(event: PatientSuspendedEvent): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: PatientSuspendedEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.SYSTEM,
+      targetType: null,
+      targetId: null,
+      priority: NotificationPriority.HIGH,
+    });
+  }
+
+  @OnEvent(WalletTransactionEvent.eventName)
+  async handleWalletTransaction(event: WalletTransactionEvent): Promise<void> {
+    const messageKey =
+      event.payload.action === 'FREEZE'
+        ? 'notifications.wallet.frozen'
+        : 'notifications.wallet.refund';
+
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.SYSTEM,
+      targetType: null,
+      targetId: null,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(ReferralConsumedEvent.eventName)
+  async handleReferralConsumed(event: ReferralConsumedEvent): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: ReferralConsumedEvent.eventName,
+      arguments: this.toArguments(event.payload),
+      type: NotificationType.REFERRAL,
+      targetType: NotificationTargetType.REFERRAL,
+      targetId: event.payload.referralId,
+      priority: NotificationPriority.MEDIUM,
+    });
+  }
+
+  @OnEvent(AppointmentNoShowEvent.eventName)
+  async handleAppointmentNoShow(event: AppointmentNoShowEvent): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: AppointmentNoShowEvent.eventName,
+      arguments: this.toArguments(event.payload),
       type: NotificationType.APPOINTMENT,
       targetType: NotificationTargetType.APPOINTMENT,
       targetId: event.payload.appointmentId,
@@ -242,5 +393,9 @@ export class NotificationEventListener {
     await this.notificationRepository.save(notification);
 
     // Future WebSocket/Gateway emit can be attached here.
+  }
+
+  private toArguments<T extends object>(payload: T): Record<string, unknown> {
+    return payload as unknown as Record<string, unknown>;
   }
 }

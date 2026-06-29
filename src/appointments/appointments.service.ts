@@ -53,7 +53,14 @@ import {
   Referral,
   ReferralStatus,
 } from '../referrals/entities/referral.entity';
-import { AppointmentBookedEvent, AppointmentCancelledEvent } from '../notifications/events';
+import {
+  AppointmentBookedEvent,
+  AppointmentCancelledEvent,
+  AppointmentNoShowEvent,
+  PatientSuspendedEvent,
+  ReferralConsumedEvent,
+  WalletTransactionEvent,
+} from '../notifications/events';
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -172,7 +179,7 @@ export class AppointmentsService {
       dto.endTime,
     );
 
-    const appointment = await this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const walletRepository = manager.getRepository(Wallet);
 
       const wallet = await walletRepository.findOne({
@@ -261,6 +268,19 @@ export class AppointmentsService {
 
       await appointmentRepository.save(appointment);
 
+      const emittedEvents: Array<{ eventName: string; event: unknown }> = [
+        {
+          eventName: WalletTransactionEvent.eventName,
+          event: new WalletTransactionEvent({
+            userId,
+            appointmentId: appointment.id,
+            action: 'FREEZE',
+            amount: appointmentFee.toFixed(2),
+            balanceAfter: wallet.availableBalance,
+          }),
+        },
+      ];
+
       // 💡 جديد: استهلاك الإحالة وتحويل حالتها إلى COMPLETED وربط الموعد بها بأمان تام باستخدام الـ manager الحالي
       if (dto.referralId) {
         await this.referralsService.consumeReferral(
@@ -268,25 +288,38 @@ export class AppointmentsService {
           appointment.id,
           manager,
         );
+
+        emittedEvents.push({
+          eventName: ReferralConsumedEvent.eventName,
+          event: new ReferralConsumedEvent({
+            userId,
+            referralId: dto.referralId,
+            appointmentId: appointment.id,
+          }),
+        });
       }
 
-      return appointment;
+      return { appointment, emittedEvents };
     });
+
+    for (const emittedEvent of result.emittedEvents) {
+      await this.eventEmitter.emitAsync(emittedEvent.eventName, emittedEvent.event);
+    }
 
     await this.eventEmitter.emitAsync(
       AppointmentBookedEvent.eventName,
       new AppointmentBookedEvent({
         userId,
-        appointmentId: appointment.id,
-        requestedDate: appointment.requestedDate.toISOString().slice(0, 10),
-        startTime: appointment.startTime,
-        endTime: appointment.endTime,
+        appointmentId: result.appointment.id,
+        requestedDate: result.appointment.requestedDate.toISOString().slice(0, 10),
+        startTime: result.appointment.startTime,
+        endTime: result.appointment.endTime,
         doctorName: null,
         clinicName: clinic.name,
       }),
     );
 
-    return appointment;
+    return result.appointment;
   }
 
   async getMyAppointments(
@@ -459,7 +492,7 @@ export class AppointmentsService {
     if (appointment.status === 'cancelled') {
       throw new BadRequestException('Appointment is already cancelled');
     }
-    const updatedAppointment = await this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const appointmentRepo = manager.getRepository(Appointment);
 
       const paymentRepo = manager.getRepository(Payment);
@@ -503,8 +536,11 @@ export class AppointmentsService {
         }
       }
 
+      const emittedEvents: Array<{ eventName: string; event: unknown }> = [];
+
       if (!payment) {
-        return appointmentRepo.save(appointment);
+        const savedAppointment = await appointmentRepo.save(appointment);
+        return { appointment: savedAppointment, emittedEvents };
       }
 
       const wallet = await walletRepo.findOne({
@@ -514,7 +550,8 @@ export class AppointmentsService {
       });
 
       if (!wallet) {
-        return appointmentRepo.save(appointment);
+        const savedAppointment = await appointmentRepo.save(appointment);
+        return { appointment: savedAppointment, emittedEvents };
       }
 
       const amount = Number(payment.amount);
@@ -588,21 +625,37 @@ export class AppointmentsService {
 
       await paymentRepo.save(payment);
 
-      return appointmentRepo.save(appointment);
+      emittedEvents.push({
+        eventName: WalletTransactionEvent.eventName,
+        event: new WalletTransactionEvent({
+          userId: appointment.patient.userId,
+          appointmentId: appointment.id,
+          action: 'REFUND',
+          amount: payment.refundAmount,
+          balanceAfter: wallet.availableBalance,
+        }),
+      });
+
+      const savedAppointment = await appointmentRepo.save(appointment);
+      return { appointment: savedAppointment, emittedEvents };
     });
+
+    for (const emittedEvent of result.emittedEvents) {
+      await this.eventEmitter.emitAsync(emittedEvent.eventName, emittedEvent.event);
+    }
 
     await this.eventEmitter.emitAsync(
       AppointmentCancelledEvent.eventName,
       new AppointmentCancelledEvent({
         userId: appointment.patient.userId,
-        appointmentId: updatedAppointment.id,
-        exceptionDate: updatedAppointment.requestedDate.toISOString().slice(0, 10),
+        appointmentId: result.appointment.id,
+        exceptionDate: result.appointment.requestedDate.toISOString().slice(0, 10),
         doctorName: null,
         clinicName: appointment.clinic?.name ?? null,
       }),
     );
 
-    return updatedAppointment;
+    return result.appointment;
   }
   async checkInAppointment(
     id: number,
@@ -636,7 +689,10 @@ export class AppointmentsService {
     manager: EntityManager,
 
     createdBy: ViolationCreatedBy,
-  ): Promise<void> {
+  ): Promise<{
+    noShowEvent: AppointmentNoShowEvent;
+    suspendedEvent: PatientSuspendedEvent | null;
+  }> {
     const appointmentRepo = manager.getRepository(Appointment);
 
     const paymentRepo = manager.getRepository(Payment);
@@ -650,6 +706,8 @@ export class AppointmentsService {
     const settingRepo = manager.getRepository(SystemSetting);
 
     const violationRepo = manager.getRepository(PatientViolation);
+
+    let suspendedEvent: PatientSuspendedEvent | null = null;
 
     appointment.status = 'no_show';
 
@@ -728,10 +786,27 @@ export class AppointmentsService {
             status: UserStatus.SUSPENDED,
           },
         );
+
+        suspendedEvent = new PatientSuspendedEvent({
+          userId: patient.userId,
+          appointmentId: appointment.id,
+          noShowCount: patient.noShowCount,
+          suspendedAt: new Date().toISOString(),
+        });
       }
     }
 
     await appointmentRepo.save(appointment);
+
+    return {
+      noShowEvent: new AppointmentNoShowEvent({
+        userId: patient?.userId ?? appointment.patientId,
+        appointmentId: appointment.id,
+        createdBy: createdBy === ViolationCreatedBy.DOCTOR ? 'DOCTOR' : 'SYSTEM',
+        noShowCount: patient?.noShowCount ?? 0,
+      }),
+      suspendedEvent,
+    };
   }
   async markNoShow(
     id: number,
@@ -770,8 +845,8 @@ export class AppointmentsService {
       );
     }
 
-    await this.dataSource.transaction(async (manager) => {
-      await this.applyNoShow(
+    const result = await this.dataSource.transaction(async (manager) => {
+      return this.applyNoShow(
         appointment,
 
         manager,
@@ -779,6 +854,18 @@ export class AppointmentsService {
         ViolationCreatedBy.DOCTOR,
       );
     });
+
+    await this.eventEmitter.emitAsync(
+      AppointmentNoShowEvent.eventName,
+      result.noShowEvent,
+    );
+
+    if (result.suspendedEvent) {
+      await this.eventEmitter.emitAsync(
+        PatientSuspendedEvent.eventName,
+        result.suspendedEvent,
+      );
+    }
 
     return this.getAppointmentWithRelations(id);
   }
@@ -1492,17 +1579,32 @@ export class AppointmentsService {
       return;
     }
 
+    const results: Array<{
+      noShowEvent: AppointmentNoShowEvent;
+      suspendedEvent: PatientSuspendedEvent | null;
+    }> = [];
+
     await this.dataSource.transaction(async (manager) => {
       for (const appointment of appointments) {
-        await this.applyNoShow(
+        results.push(
+          await this.applyNoShow(
           appointment,
 
           manager,
 
           ViolationCreatedBy.SYSTEM,
+          ),
         );
       }
     });
+
+    for (const result of results) {
+      await this.eventEmitter.emitAsync(AppointmentNoShowEvent.eventName, result.noShowEvent);
+
+      if (result.suspendedEvent) {
+        await this.eventEmitter.emitAsync(PatientSuspendedEvent.eventName, result.suspendedEvent);
+      }
+    }
   }
 
   //

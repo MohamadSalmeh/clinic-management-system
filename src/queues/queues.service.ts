@@ -22,7 +22,12 @@ import { Wallet } from '../wallets/entities/wallet.entity';
 import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { SystemSettingsService } from '../system-setting/system-settings.service';
 import { SystemSetting } from '../system-setting/entities/system-setting.entity';
-import { QueueConsultationCompletedEvent, QueuePatientCalledEvent, QueuePatientSkippedEvent } from '../notifications/events';
+import {
+  AppointmentCompletedEvent,
+  QueueConsultationCompletedEvent,
+  QueuePatientCalledEvent,
+  QueuePatientSkippedEvent,
+} from '../notifications/events';
 
 @Injectable()
 export class QueuesService {
@@ -378,7 +383,7 @@ async callNextPatient(doctorUserId: number, clinicId: number): Promise<Queue> {
     actualDurationMinutes = Math.round(diffInMs / (1000 * 60)); // تحويل إلى دقائق
   }
 
-  return await this.dataSource.transaction(async (manager) => {
+  const result = await this.dataSource.transaction(async (manager) => {
     const transactionalQueueRepo = manager.getRepository(Queue);
     const transactionalAppointmentRepo = manager.getRepository(Appointment);
     const transactionalWalletRepo = manager.getRepository(Wallet);
@@ -432,22 +437,22 @@ async callNextPatient(doctorUserId: number, clinicId: number): Promise<Queue> {
       actualDurationMinutes,
     );
 
-    const updatedQueue = await transactionalQueueRepo.save(queue);
-
-    if (updatedQueue.appointment?.patient?.userId) {
-      await this.eventEmitter.emitAsync(
-        QueueConsultationCompletedEvent.eventName,
-        new QueueConsultationCompletedEvent({
-          userId: updatedQueue.appointment.patient.userId,
-          appointmentId: updatedQueue.appointment.id,
-          queueId: updatedQueue.id,
-          clinicName: queue.clinic?.name ?? null,
-        }),
-      );
-    }
-
-    return updatedQueue;
+    return await transactionalQueueRepo.save(queue);
   });
+
+  if (result.appointment?.patient?.userId) {
+    await this.eventEmitter.emitAsync(
+      AppointmentCompletedEvent.eventName,
+      new AppointmentCompletedEvent({
+        userId: result.appointment.patient.userId,
+        appointmentId: result.appointment.id,
+        queueId: result.id,
+        clinicName: result.clinic?.name ?? null,
+      }),
+    );
+  }
+
+  return result;
 }
 
   async getLiveQueueForAdmin(query: QueueQueryDto): Promise<Queue[]> {

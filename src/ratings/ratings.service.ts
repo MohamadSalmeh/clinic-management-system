@@ -7,6 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Rating } from './entities/rating.entity';
@@ -19,6 +20,7 @@ import { PatientProfile } from '../patients/entities/patient-profile.entity';
 import { DoctorClinic } from '../doctor-clinics/entities/doctor-clinic.entity'; // تأكد من المسار الصحيح
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { Clinic } from '../clinics/entities/clinic.entity';
+import { DoctorRatedEvent } from '../notifications/events';
 
 @Injectable()
 export class RatingsService {
@@ -32,8 +34,12 @@ export class RatingsService {
     @InjectRepository(PatientProfile)
     private readonly patientProfileRepository: Repository<PatientProfile>,
 
+    @InjectRepository(DoctorProfile)
+    private readonly doctorProfileRepository: Repository<DoctorProfile>,
+
     @Inject(forwardRef(() => AppointmentsService))
     private readonly appointmentsService: AppointmentsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private async syncAverages(doctorId: number): Promise<void> {
@@ -113,6 +119,22 @@ async createRating(userId: number, dto: CreateRatingDto): Promise<Rating> {
     
     // تحديث المتوسطات بناءً على السجل الجديد الفعال
     await this.syncAverages(Number(appointment.doctorId));
+
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: { id: Number(appointment.doctorId) },
+    });
+
+    if (doctorProfile?.userId) {
+      await this.eventEmitter.emitAsync(
+        DoctorRatedEvent.eventName,
+        new DoctorRatedEvent({
+          userId: doctorProfile.userId,
+          doctorProfileId: doctorProfile.id,
+          ratingId: savedRating.id,
+          score: savedRating.score ?? dto.score,
+        }),
+      );
+    }
     
     return savedRating;
   }

@@ -6,11 +6,12 @@ import { Rating } from './entities/rating.entity';
 import { RatingReport } from './entities/rating-report.entity';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { PatientProfile } from '../patients/entities/patient-profile.entity';
+import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { AuthModule } from '../auth';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Rating, RatingReport, PatientProfile]),
+    TypeOrmModule.forFeature([Rating, RatingReport, PatientProfile, DoctorProfile]),
     AuthModule,
     // الـ forwardRef لحل التعليق الدائري مع موديول المواعيد
     forwardRef(() => AppointmentsModule),

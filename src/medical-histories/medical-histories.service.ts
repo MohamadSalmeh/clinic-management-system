@@ -3,6 +3,7 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { InjectRepository } from '@nestjs/typeorm';
 
@@ -18,6 +19,7 @@ import { CreateMedicalHistoryDto } from './dto/create-medical-history.dto';
 
 import { ActiveUserData } from '../utils';
 import { AppointmentAccessService } from '../appointment-access/appointment-access.service';
+import { MedicalHistoryCreatedEvent } from '../notifications/events';
 const MEDICAL_RECORD_EDIT_WINDOW_DAYS = 7;
 
 @Injectable()
@@ -38,6 +40,7 @@ export class MedicalHistoriesService {
         @InjectRepository(MedicalProfile)
         private readonly medicalProfileRepository: Repository<MedicalProfile>,
         private readonly appointmentAccessService: AppointmentAccessService,
+        private readonly eventEmitter: EventEmitter2,
     ) { }
     async create(
         currentUser: ActiveUserData,
@@ -127,7 +130,31 @@ export class MedicalHistoriesService {
             doctorNotes: dto.doctorNotes,
         });
 
-        return this.medicalHistoryRepository.save(history);
+        const savedHistory = await this.medicalHistoryRepository.save(history);
+        const patient = await this.patientRepository.findOne({
+            where: { id: appointment.patientId },
+        });
+
+        if (patient?.userId) {
+            const doctor = await this.doctorRepository.findOne({
+                where: { id: doctorProfile.id },
+                relations: { user: true },
+            });
+
+            await this.eventEmitter.emitAsync(
+                MedicalHistoryCreatedEvent.eventName,
+                new MedicalHistoryCreatedEvent({
+                    userId: patient.userId,
+                    medicalHistoryId: savedHistory.id,
+                    appointmentId: appointment.id,
+                    doctorName: doctor?.user
+                        ? `${doctor.user.firstName} ${doctor.user.lastName ?? ''}`.trim()
+                        : null,
+                }),
+            );
+        }
+
+        return savedHistory;
     }
     async getMyMedicalHistories(
         currentUser: ActiveUserData,

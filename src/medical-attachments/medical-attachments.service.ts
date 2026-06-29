@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 
@@ -15,6 +16,7 @@ import { ActiveUserData } from '../utils';
 import { AppointmentAccessService } from '../appointment-access/appointment-access.service';
 import { CurrentUser } from '../common/decorators';
 import * as path from 'path';
+import { MedicalAttachmentUploadedEvent } from '../notifications/events';
 
 @Injectable()
 export class MedicalAttachmentsService {
@@ -39,6 +41,7 @@ export class MedicalAttachmentsService {
 
         private readonly fileStorageService: FileStorageService,
         private readonly appointmentAccessService: AppointmentAccessService,
+        private readonly eventEmitter: EventEmitter2,
     ) { }
     private async createAttachment(
         medicalHistoryId: number | null,
@@ -92,6 +95,10 @@ export class MedicalAttachmentsService {
             throw new NotFoundException('Medical profile not found');
         }
 
+        const patientProfile = await this.patientRepository.findOne({
+            where: { id: appointment.patientId },
+        });
+
         /*return this.createAttachment(
             null,
             medicalProfile.id,
@@ -110,6 +117,17 @@ export class MedicalAttachmentsService {
                 ),
             );
         }
+
+        await this.eventEmitter.emitAsync(
+            MedicalAttachmentUploadedEvent.eventName,
+            new MedicalAttachmentUploadedEvent({
+                userId: patientProfile?.userId ?? currentUser.sub,
+                attachmentIds: attachments.map((attachment) => attachment.id),
+                source: 'profile',
+                appointmentId: appointment.id,
+                medicalHistoryId: null,
+            }),
+        );
 
         return attachments;
     }
@@ -159,6 +177,17 @@ export class MedicalAttachmentsService {
 
         }
 
+        await this.eventEmitter.emitAsync(
+            MedicalAttachmentUploadedEvent.eventName,
+            new MedicalAttachmentUploadedEvent({
+                userId: currentUser.sub,
+                attachmentIds: attachments.map((attachment) => attachment.id),
+                source: 'history',
+                appointmentId: history.appointmentId,
+                medicalHistoryId: history.id,
+            }),
+        );
+
         return attachments;
     }
     async uploadMyProfileAttachment(
@@ -207,6 +236,17 @@ export class MedicalAttachmentsService {
             );
 
         }
+
+        await this.eventEmitter.emitAsync(
+            MedicalAttachmentUploadedEvent.eventName,
+            new MedicalAttachmentUploadedEvent({
+                userId: currentUser.sub,
+                attachmentIds: attachments.map((attachment) => attachment.id),
+                source: 'profile',
+                appointmentId: null,
+                medicalHistoryId: null,
+            }),
+        );
 
         return attachments;
     }
