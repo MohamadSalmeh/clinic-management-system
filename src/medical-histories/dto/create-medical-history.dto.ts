@@ -7,24 +7,16 @@ import {
 } from 'class-validator';
 
 export class CreateMedicalHistoryDto {
-
     @IsInt()
-    appointmentId: number;
+    appointmentId!: number;
 
     @IsString()
-    diagnosis: string;
+    diagnosis!: string;
 
     @IsString()
-    treatmentPlan: string;
+    treatmentPlan!: string;
 
     @IsString()
-    doctorNotes: string;
-
-    @IsBoolean()
-    followUpNeeded: boolean;
-
-    @IsOptional()
-    @IsDateString()
-    followUpDate?: string;
+    doctorNotes!: string;
 
 }

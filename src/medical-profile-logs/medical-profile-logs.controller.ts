@@ -11,6 +11,7 @@ import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
 import { MedicalProfileLogsService, MedicalProfileLogResponse } from './medical-profile-logs.service';
 import { MedicalProfileLogQueryDto } from './dto';
+import { MedicalProfileLog } from './entities/medical-profile-log.entity';
 
 @Controller('medical-profile-logs')
 @UseGuards(AuthRolesGuard, VerifiedGuard)
@@ -38,5 +39,19 @@ export class MedicalProfileLogsController {
         @Query() query: MedicalProfileLogQueryDto,
     ): Promise<MedicalProfileLogResponse[]> {
         return this.medicalProfileLogsService.getLogsForPatient(patientId, query);
+    }
+    @Get('appointment/:appointmentId')
+    @Roles(UserRole.DOCTOR)
+    async getLogsByAppointment(
+        @Param('appointmentId', ParseIntPipe)
+        appointmentId: number,
+
+        @CurrentUser()
+        currentUser: ActiveUserData,
+    ): Promise<MedicalProfileLog[]> {
+        return this.medicalProfileLogsService.getByAppointment(
+            appointmentId,
+            currentUser,
+        );
     }
 }

@@ -4,13 +4,9 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 
-import {
-    InjectRepository,
-} from '@nestjs/typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 
-import {
-    Repository,
-} from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { Appointment } from '../appointments/entities/appointment.entity';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
@@ -21,194 +17,200 @@ import { MedicalHistory } from './entities/medical-history.entity';
 import { CreateMedicalHistoryDto } from './dto/create-medical-history.dto';
 
 import { ActiveUserData } from '../utils';
+import { AppointmentAccessService } from '../appointment-access/appointment-access.service';
+const MEDICAL_RECORD_EDIT_WINDOW_DAYS = 7;
+
 @Injectable()
 export class MedicalHistoriesService {
     constructor(
-
         @InjectRepository(MedicalHistory)
-        private readonly medicalHistoryRepository:
-            Repository<MedicalHistory>,
+        private readonly medicalHistoryRepository: Repository<MedicalHistory>,
 
         @InjectRepository(Appointment)
-        private readonly appointmentRepository:
-            Repository<Appointment>,
+        private readonly appointmentRepository: Repository<Appointment>,
 
         @InjectRepository(DoctorProfile)
-        private readonly doctorRepository:
-            Repository<DoctorProfile>,
+        private readonly doctorRepository: Repository<DoctorProfile>,
 
         @InjectRepository(PatientProfile)
-        private readonly patientRepository:
-            Repository<PatientProfile>,
+        private readonly patientRepository: Repository<PatientProfile>,
 
         @InjectRepository(MedicalProfile)
-        private readonly medicalProfileRepository:
-            Repository<MedicalProfile>,
-
+        private readonly medicalProfileRepository: Repository<MedicalProfile>,
+        private readonly appointmentAccessService: AppointmentAccessService,
     ) { }
     async create(
-
         currentUser: ActiveUserData,
 
         dto: CreateMedicalHistoryDto,
-
     ): Promise<MedicalHistory> {
-
-        const doctor =
-
-            await this.doctorRepository.findOne({
-
-                where: {
-
-                    userId: currentUser.sub,
-
-                },
-
-            });
-
-        if (!doctor) {
-
-            throw new NotFoundException(
-                'Doctor not found',
+        /* const doctor = await this.doctorRepository.findOne({
+                 where: {
+                     userId: currentUser.sub,
+                 },
+             });
+     
+             if (!doctor) {
+                 throw new NotFoundException('Doctor not found');
+             }
+     
+             const appointment = await this.appointmentRepository.findOne({
+                 where: {
+                     id: dto.appointmentId,
+                 },
+     
+                 relations: {
+                     patient: true,
+                 },
+             });
+     
+             if (!appointment) {
+                 throw new NotFoundException('Appointment not found');
+             }
+     
+             if (Number(appointment.doctorId) !== Number(doctor.id)) {
+                 throw new BadRequestException('This appointment does not belong to you');
+             }
+             const appointmentDate = new Date(appointment.requestedDate);
+             const expiryDate = new Date(appointmentDate);
+     
+             expiryDate.setDate(
+                 expiryDate.getDate() + MEDICAL_RECORD_EDIT_WINDOW_DAYS,
+             );
+     
+             if (new Date() > expiryDate) {
+                 throw new BadRequestException(
+                     'Medical history creation window has expired',
+                 );
+             }*/
+        const { appointment, doctorProfile } =
+            await this.appointmentAccessService.validateDoctorAppointmentAccess(
+                dto.appointmentId,
+                currentUser.sub,
             );
 
+        if (appointment.status === 'cancelled') {
+            throw new BadRequestException('Cancelled appointments cannot be used');
         }
 
-        const appointment =
-
-            await this.appointmentRepository.findOne({
-
-                where: {
-
-                    id: dto.appointmentId,
-
-                },
-
-                relations: {
-
-                    patient: true,
-
-                },
-
-            });
-
-        if (!appointment) {
-
-            throw new NotFoundException(
-                'Appointment not found',
-            );
-
-        }
-
-        if (
-
-            Number(appointment.doctorId)
-
-            !==
-
-            Number(doctor.id)
-
-        ) {
-
-            throw new BadRequestException(
-                'This appointment does not belong to you',
-            );
-
-        }
-
-        if (
-
-            appointment.status
-
-            !==
-
-            'completed'
-
-        ) {
-
-            throw new BadRequestException(
-                'Medical history can only be created after completed appointment',
-            );
-
-        }
-
-        const existing =
-
-            await this.medicalHistoryRepository.findOne({
-
-                where: {
-
-                    appointmentId:
-                        appointment.id,
-
-                },
-
-            });
+        const existing = await this.medicalHistoryRepository.findOne({
+            where: {
+                appointmentId: appointment.id,
+            },
+        });
 
         if (existing) {
-
-            throw new BadRequestException(
-                'Medical history already exists',
-            );
-
+            throw new BadRequestException('Medical history already exists');
         }
 
-        const medicalProfile =
-
-            await this.medicalProfileRepository.findOne({
-
-                where: {
-
-                    patientProfileId:
-                        appointment.patientId,
-
-                },
-
-            });
+        const medicalProfile = await this.medicalProfileRepository.findOne({
+            where: {
+                patientProfileId: appointment.patientId,
+            },
+        });
 
         if (!medicalProfile) {
-
-            throw new NotFoundException(
-                'Medical profile not found',
-            );
-
+            throw new NotFoundException('Medical profile not found');
         }
 
-        const history =
+        const history = this.medicalHistoryRepository.create({
+            medicalProfileId: medicalProfile.id,
 
-            this.medicalHistoryRepository.create({
+            appointmentId: appointment.id,
 
-                medicalProfileId:
-                    medicalProfile.id,
+            doctorProfileId: doctorProfile.id,
 
-                appointmentId:
-                    appointment.id,
+            diagnosis: dto.diagnosis,
 
-                doctorProfileId:
-                    doctor.id,
+            treatmentPlan: dto.treatmentPlan,
 
-                diagnosis:
-                    dto.diagnosis,
+            doctorNotes: dto.doctorNotes,
+        });
 
-                treatmentPlan:
-                    dto.treatmentPlan,
+        return this.medicalHistoryRepository.save(history);
+    }
+    async getMyMedicalHistories(
+        currentUser: ActiveUserData,
+        page = 1,
+        limit = 20,
+    ) {
+        const patient = await this.patientRepository.findOne({
+            where: {
+                userId: currentUser.sub,
+            },
+        });
 
-                doctorNotes:
-                    dto.doctorNotes,
+        if (!patient) {
+            throw new NotFoundException('Patient profile not found');
+        }
 
-                followUpNeeded:
-                    dto.followUpNeeded,
+        const medicalProfile = await this.medicalProfileRepository.findOne({
+            where: {
+                patientProfileId: patient.id,
+            },
+        });
 
-                followUpDate:
-                    dto.followUpDate
-                        ? new Date(dto.followUpDate)
-                        : null,
+        if (!medicalProfile) {
+            throw new NotFoundException('Medical profile not found');
+        }
 
-            });
+        const [items, total] = await this.medicalHistoryRepository.findAndCount({
+            where: {
+                medicalProfileId: medicalProfile.id,
+            },
 
-        return this.medicalHistoryRepository.save(
-            history,
-        );
+            order: {
+                created_at: 'DESC',
+            },
 
+            skip: (page - 1) * limit,
+
+            take: limit,
+
+            relations: {
+                doctorProfile: true,
+                appointment: true,
+            },
+        });
+
+        return {
+            data: items,
+
+            total,
+
+            page,
+
+            limit,
+
+            totalPages: Math.ceil(total / limit),
+        };
+    }
+    async getPatientMedicalHistory(
+        appointmentId: number,
+        currentUser: ActiveUserData,
+    ): Promise<MedicalHistory[]> {
+
+        const medicalProfile =
+            await this.appointmentAccessService.getMedicalProfileByAppointment(
+                appointmentId,
+                currentUser.sub,
+            );
+
+        return this.medicalHistoryRepository.find({
+            where: {
+                medicalProfileId: medicalProfile.id,
+            },
+
+            order: {
+                created_at: 'DESC',
+            },
+
+            relations: {
+                appointment: true,
+                doctorProfile: true,
+                medicines: true,
+                attachments: true,
+            },
+        });
     }
 }

@@ -17,6 +17,7 @@ import { PatientProfile } from '../patients/entities/patient-profile.entity';
 import { MedicalHistoriesController } from './medical-histories.controller';
 
 import { MedicalHistoriesService } from './medical-histories.service';
+import { AppointmentAccessModule } from '../appointment-access/appointment-access.module';
 
 @Module({
 
@@ -37,6 +38,9 @@ import { MedicalHistoriesService } from './medical-histories.service';
         ]),
 
         AuthModule,
+        
+    AppointmentAccessModule
+    
 
     ],
 

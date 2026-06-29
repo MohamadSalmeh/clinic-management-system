@@ -29,6 +29,8 @@ import { DoctorLeavesModule } from './doctor-leaves/doctor-leaves.module';
 import { SystemSettingsModule } from './system-setting/system-settings.module';
 import { PatientViolationsModule } from './patient-violations/patient-violations.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { FileStorageModule } from './file-storage/file-storage.module';
+import { AppointmentAccessModule } from './appointment-access/appointment-access.module';
 
 @Module({
   imports: [
@@ -80,7 +82,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     TransactionsModule,
     DoctorLeavesModule,
     RatingsModule,
-    PatientViolationsModule
+    PatientViolationsModule,
+    FileStorageModule,
+    AppointmentAccessModule
   ],
   controllers: [],
   providers: [AppService],

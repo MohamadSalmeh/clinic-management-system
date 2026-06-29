@@ -38,11 +38,6 @@ export class MedicalHistory extends BaseEntity {
     @Column({ name: 'doctor_notes', type: 'text' })
     doctorNotes!: string;
 
-    @Column({ name: 'follow_up_needed', type: 'boolean', default: false })
-    followUpNeeded!: boolean;
-
-    @Column({ name: 'follow_up_date', type: 'date', nullable: true })
-    followUpDate!: Date | null;
 
     @OneToMany(() => PrescribedMedicine, (medicine) => medicine.medicalHistory)
     medicines!: PrescribedMedicine[];
@@ -52,10 +47,6 @@ export class MedicalHistory extends BaseEntity {
         return this.attachments?.length ?? 0;
     }
 
-    @Expose({ name: 'history_label' })
-    get historyLabel(): string {
-        return this.followUpNeeded ? 'Follow-up Required' : 'Standard Visit';
-    }
 
     @ManyToOne(() => MedicalProfile, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'medical_profile_id' })
