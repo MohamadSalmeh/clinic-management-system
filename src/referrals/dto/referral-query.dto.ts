@@ -37,6 +37,39 @@ export class ReferralQueryDto {
     @IsOptional()
     @Type(() => Number)
     @IsInt()
-    toClinicId?: number;
-}
+    toDoctorId?: number; // ✅ جديد: فلترة حسب الدكتور المستهدف
 
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    toClinicId?: number;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    clinicId?: number; // ✅ جديد: اسم بديل لـ toClinicId
+
+    @IsOptional()
+    @IsString()
+    search?: string; // ✅ بحث عام
+
+    // ✅ جديد: فلترة حسب تخصص الدكتور (من الـ DoctorProfile)
+    @IsOptional()
+    @IsString()
+    specialization?: string;
+
+    // ✅ جديد: فلترة حسب العيادة (Clinic Name)
+    @IsOptional()
+    @IsString()
+    clinicName?: string;
+
+    // ✅ جديد: فلترة حسب اسم المريض
+    @IsOptional()
+    @IsString()
+    patientName?: string;
+
+    // ✅ جديد: فلترة حسب اسم الدكتور المرسل
+    @IsOptional()
+    @IsString()
+    fromDoctorName?: string;
+}
