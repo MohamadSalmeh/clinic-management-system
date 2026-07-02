@@ -8,6 +8,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne } fro
 import { DoctorSchedule } from '../../doctor-schedules/entities/doctor-schedule.entity';
 import { Queue } from '../../queues/entities/queue.entity';
 import { Rating } from '../../ratings/entities/rating.entity';
+import { FavoriteDoctor } from '../../favorite-doctors/entities/favorite-doctor.entity';
 
 @Entity({ name: 'doctor_profiles' })
 export class DoctorProfile extends BaseEntity {
@@ -52,7 +53,7 @@ export class DoctorProfile extends BaseEntity {
     @Column({ name: 'invited_by_admin_id', type: 'bigint', nullable: true })
     invitedByAdminId!: number | null;
 
-   // أضف هذا العمود داخل كلاس DoctorProfile
+    // أضف هذا العمود داخل كلاس DoctorProfile
     @Column({
         name: 'average_rating',
         type: 'decimal',
@@ -61,7 +62,7 @@ export class DoctorProfile extends BaseEntity {
         default: 0.0,
     })
     averageRating!: number;
-    
+
     @OneToOne(() => User, (user) => user.doctorProfile, {
         onDelete: 'CASCADE',
     })
@@ -88,4 +89,10 @@ export class DoctorProfile extends BaseEntity {
     get clinicCount(): number {
         return this.clinicAssignments?.length || 0;
     }
+    @OneToMany(
+        () => FavoriteDoctor,
+        (favorite) => favorite.doctor,
+    )
+    favoriteByPatients!: FavoriteDoctor[];
+
 }

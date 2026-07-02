@@ -33,6 +33,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { FileStorageModule } from './file-storage/file-storage.module';
 import { AppointmentAccessModule } from './appointment-access/appointment-access.module';
 import { WaitlistModule } from './waitlists/waitlists.module';
+import { FavoriteDoctorsModule } from './favorite-doctors/favorite-doctors.module';
+
 
 @Module({
   imports: [
@@ -88,7 +90,8 @@ import { WaitlistModule } from './waitlists/waitlists.module';
     PatientViolationsModule,
     FileStorageModule,
     AppointmentAccessModule,
-    WaitlistModule
+    WaitlistModule,
+    FavoriteDoctorsModule,
   ],
   controllers: [],
   providers: [AppService],
