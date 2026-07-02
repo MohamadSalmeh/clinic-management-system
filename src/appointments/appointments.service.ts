@@ -77,8 +77,11 @@ import {
   todayDateString,
   addYears,
   getDayOfWeek,
-  addMinutesToTime
+  addMinutesToTime,
 } from '../common/utils/date-utils';
+import { SystemSettingsService } from '../system-setting/system-settings.service';
+import { WaitlistService } from '../waitlists/waitlists.service';
+import { Waitlist } from '../waitlists/entities/waitlist.entity';
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -112,6 +115,7 @@ export class AppointmentsService {
     private readonly walletRepository: Repository<Wallet>,
     @InjectRepository(SystemSetting)
     private readonly systemSettingRepository: Repository<SystemSetting>,
+    private readonly systemSettingsService: SystemSettingsService,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
 
@@ -124,6 +128,11 @@ export class AppointmentsService {
     @Inject(forwardRef(() => ReferralsService))
     private readonly referralsService: ReferralsService,
     private readonly eventEmitter: EventEmitter2,
+
+    private readonly waitlistService: WaitlistService,
+
+    @InjectRepository(Waitlist)
+    private readonly waitlistRepository: Repository<Waitlist>,
   ) { }
   async createAppointment(
     userId: number,
@@ -189,12 +198,29 @@ export class AppointmentsService {
       }*/
 
     await this.ensureDoctorClinicAssignment(doctorProfile.id, clinic.id);
+    /*const calculatedSlot =
+      await this.findNextAvailableSlot({
+        doctorId: dto.doctorId,
+        clinicId: dto.clinicId,
+        scheduleId: dto.scheduleId,
+        requestedDate: dto.requestedDate,
+        type: dto.type,
+      });
+    if (
+      calculatedSlot.startTime !== dto.startTime ||
+      calculatedSlot.endTime !== dto.endTime
+    ) {
+      throw new BadRequestException(
+        'Appointment slot is no longer available',
+      );
+    }*/
     await this.ensureAppointmentSlotIsValid(
       doctorProfile.id,
       clinic.id,
       dto.requestedDate,
       dto.startTime,
       dto.endTime,
+      dto.type,
     );
 
     const result = await this.dataSource.transaction(async (manager) => {
@@ -321,7 +347,10 @@ export class AppointmentsService {
     });
 
     for (const emittedEvent of result.emittedEvents) {
-      await this.eventEmitter.emitAsync(emittedEvent.eventName, emittedEvent.event);
+      await this.eventEmitter.emitAsync(
+        emittedEvent.eventName,
+        emittedEvent.event,
+      );
     }
 
     await this.eventEmitter.emitAsync(
@@ -336,6 +365,12 @@ export class AppointmentsService {
         clinicName: clinic.name,
       }),
     );
+    await this.waitlistRepository.delete({
+      patientProfileId: patientProfile.id,
+      doctorProfileId: dto.doctorId,
+      clinicId: dto.clinicId,
+      requestedDate: toDateOnly(dto.requestedDate),
+    });
 
     return result.appointment;
   }
@@ -601,9 +636,7 @@ export class AppointmentsService {
           appointment.requestedDate instanceof Date
             ? appointment.requestedDate.toISOString().slice(0, 10)
             : appointment.requestedDate;*/
-        const appointmentDate = toDateString(
-          appointment.requestedDate,
-        );
+        const appointmentDate = toDateString(appointment.requestedDate);
 
         /*const appointmentDateTime = new Date(
           `${appointmentDate}T${appointment.startTime}`,
@@ -616,10 +649,7 @@ export class AppointmentsService {
           appointment.startTime,
         );
 
-        const diffDays = daysDiff(
-          appointmentDateTime,
-          nowDate(),
-        );
+        const diffDays = daysDiff(appointmentDateTime, nowDate());
 
         wallet.frozenBalance = (Number(wallet.frozenBalance) - amount).toFixed(
           2,
@@ -671,7 +701,10 @@ export class AppointmentsService {
     });
 
     for (const emittedEvent of result.emittedEvents) {
-      await this.eventEmitter.emitAsync(emittedEvent.eventName, emittedEvent.event);
+      await this.eventEmitter.emitAsync(
+        emittedEvent.eventName,
+        emittedEvent.event,
+      );
     }
 
     await this.eventEmitter.emitAsync(
@@ -684,7 +717,24 @@ export class AppointmentsService {
         clinicName: appointment.clinic?.name ?? null,
       }),
     );
+    //r
 
+    const hasSlot = await this.hasAvailableSlot(
+      result.appointment.doctorId,
+      result.appointment.clinicId,
+      toDateString(result.appointment.requestedDate),
+    );
+
+    if (hasSlot) {
+      await this.waitlistService.notifyWaitlist(
+        result.appointment.doctorId,
+        result.appointment.clinicId,
+        toDateString(result.appointment.requestedDate),
+        appointment.startTime,
+        appointment.endTime,
+      );
+    }
+    //r
     return result.appointment;
   }
   async checkInAppointment(
@@ -832,7 +882,8 @@ export class AppointmentsService {
       noShowEvent: new AppointmentNoShowEvent({
         userId: patient?.userId ?? appointment.patientId,
         appointmentId: appointment.id,
-        createdBy: createdBy === ViolationCreatedBy.DOCTOR ? 'DOCTOR' : 'SYSTEM',
+        createdBy:
+          createdBy === ViolationCreatedBy.DOCTOR ? 'DOCTOR' : 'SYSTEM',
         noShowCount: patient?.noShowCount ?? 0,
       }),
       suspendedEvent,
@@ -1074,8 +1125,39 @@ export class AppointmentsService {
     requestedDate: string,
     startTime: string,
     endTime: string,
+    type: string,
   ): Promise<void> {
     this.validateTimeRange(startTime, endTime);
+    if (
+      requestedDate < todayDateString() ||
+      (
+        requestedDate === todayDateString() &&
+        startTime <= currentTimeString()
+      )
+    ) {
+      throw new BadRequestException(
+        'Cannot book an appointment in the past',
+      );
+    }
+    const settings =
+      await this.systemSettingsService.getSettings();
+
+    const expectedDuration =
+      type === 'Initial Visit'
+        ? settings.initialVisitDuration
+        : settings.returnVisitDuration;
+
+    const expectedEndTime =
+      addMinutesToTime(
+        startTime,
+        expectedDuration,
+      );
+
+    if (endTime !== expectedEndTime) {
+      throw new BadRequestException(
+        'Invalid appointment duration',
+      );
+    }
 
     const dayOfWeek = getDayOfWeek(requestedDate);
     console.log(requestedDate);
@@ -1098,6 +1180,11 @@ export class AppointmentsService {
     const workingSchedules = schedules.filter(
       (schedule) => schedule.type !== DoctorScheduleType.BREAK,
     );
+    if (workingSchedules.length === 0) {
+      throw new BadRequestException(
+        'Doctor has no working schedule on the requested day',
+      );
+    }
     const breakSchedules = schedules.filter(
       (schedule) => schedule.type === DoctorScheduleType.BREAK,
     );
@@ -1145,9 +1232,24 @@ export class AppointmentsService {
       },
     });
 
-    const overlapsLeave = leaves.some((leave) => {
+    /*const overlapsLeave = leaves.some((leave) => {
       if (!leave.startTime || !leave.endTime) {
         return true;
+      }
+
+      return this.isOverlap(startTime, endTime, leave.startTime, leave.endTime);
+    });*/
+    const hasFullDayLeave = leaves.some(
+      (leave) => !leave.startTime && !leave.endTime,
+    );
+
+    if (hasFullDayLeave) {
+      throw new BadRequestException('Doctor is on leave for the whole day');
+    }
+
+    const overlapsLeave = leaves.some((leave) => {
+      if (!leave.startTime || !leave.endTime) {
+        return false;
       }
 
       return this.isOverlap(startTime, endTime, leave.startTime, leave.endTime);
@@ -1436,7 +1538,18 @@ export class AppointmentsService {
     return currentUser.usertype.toLowerCase() as UserRole;
   }
   //
-  async calculateNextAvailableTime(dto: CalculateAppointmentTimeDto) {
+  async calculateNextAvailableTime(
+    dto: CalculateAppointmentTimeDto,
+  ) {
+    return this.findNextAvailableSlot(dto);
+  }
+
+  private async findNextAvailableSlot(
+    dto: CalculateAppointmentTimeDto,
+  ): Promise<{
+    startTime: string;
+    endTime: string;
+  }> {//r
     const schedule = await this.doctorScheduleRepository.findOne({
       where: {
         id: dto.scheduleId,
@@ -1449,10 +1562,131 @@ export class AppointmentsService {
     if (!schedule) {
       throw new BadRequestException('Schedule not found');
     }
+    if (schedule.type === DoctorScheduleType.BREAK) {
+      throw new BadRequestException('Break schedule cannot be used');
+    }
+    const breakSchedules = await this.doctorScheduleRepository.find({
+      where: {
+        doctorProfileId: dto.doctorId,
+        clinicId: dto.clinicId,
+        dayOfWeek: schedule.dayOfWeek,
+        type: DoctorScheduleType.BREAK,
+        isActive: true,
+      },
+    });
+    const dayOfWeek = getDayOfWeek(dto.requestedDate);
 
-    const duration = dto.type === 'Initial Visit' ? 30 : 20;
+    if (dayOfWeek !== schedule.dayOfWeek) {
+      throw new BadRequestException(
+        'Requested date does not match schedule day',
+      );
+    }
+    const leaves = await this.doctorLeaveRepository.find({
+      where: {
+        doctorProfileId: dto.doctorId,
+        exceptionDate: Raw((alias) => `DATE(${alias}) = :date`, {
+          date: dto.requestedDate,
+        }),
+      },
+    });
 
+    const settings = await this.systemSettingsService.getSettings();
+
+    const duration =
+      dto.type === 'Initial Visit'
+        ? settings.initialVisitDuration
+        : settings.returnVisitDuration;
     const appointments = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctorId = :doctorId', {
+        doctorId: dto.doctorId,
+      })
+      .andWhere('DATE(appointment.requestedDate)=:date', {
+        date: dto.requestedDate,
+      })
+      .andWhere('appointment.status IN (:...status)', {
+        status: ['pending', 'confirmed'],
+      })
+      .orderBy('appointment.startTime', 'ASC')
+      .getMany();
+
+    // Full day leave
+    const hasFullDayLeave = leaves.some(
+      (leave) => !leave.startTime && !leave.endTime,
+    );
+
+    if (hasFullDayLeave) {
+      throw new BadRequestException('Doctor is on leave');
+    }
+
+    type BlockedInterval = {
+      start: string;
+      end: string;
+    };
+
+    const blockedIntervals: BlockedInterval[] = [];
+
+    // Appointments
+    for (const appointment of appointments) {
+      if (
+        appointment.startTime >= schedule.startTime &&
+        appointment.endTime <= schedule.endTime
+      ) {
+        blockedIntervals.push({
+          start: appointment.startTime,
+          end: appointment.endTime,
+        });
+      }
+    }
+
+    // Breaks
+    for (const breakSchedule of breakSchedules) {
+      blockedIntervals.push({
+        start: breakSchedule.startTime,
+        end: breakSchedule.endTime,
+      });
+    }
+
+    // Partial Leaves
+    for (const leave of leaves) {
+      if (leave.startTime && leave.endTime) {
+        blockedIntervals.push({
+          start: leave.startTime,
+          end: leave.endTime,
+        });
+      }
+    }
+
+    // Sort
+    blockedIntervals.sort((a, b) => a.start.localeCompare(b.start));
+
+    let start = schedule.startTime;
+
+    for (const interval of blockedIntervals) {
+      const candidateEnd = addMinutesToTime(start, duration);
+
+      // وجدنا فراغاً كافياً
+      if (candidateEnd <= interval.start) {
+        return {
+          startTime: start,
+          endTime: candidateEnd,
+        };
+      }
+
+      if (
+        this.isOverlap(
+          start,
+          candidateEnd,
+          interval.start,
+          interval.end,
+        )
+      ) {
+        start = interval.end;
+      }
+    }
+
+    const end = addMinutesToTime(start, duration);
+    /*const appointments = await this.appointmentRepository
       .createQueryBuilder('appointment')
       .where('appointment.doctorId = :doctorId', {
         doctorId: dto.doctorId,
@@ -1466,7 +1700,7 @@ export class AppointmentsService {
       .orderBy('appointment.endTime', 'ASC')
       .getMany();
 
-    let start = schedule.startTime;
+    /*let start = schedule.startTime;
 
     if (appointments.length > 0) {
       const insideSchedule = appointments.filter(
@@ -1479,17 +1713,89 @@ export class AppointmentsService {
       }
     }
 
-    const end = addMinutesToTime(start, duration);
+    const end = addMinutesToTime(start, duration);*/
+    /*
+    const insideSchedule = appointments.filter(
+      (appointment) =>
+        appointment.startTime >= schedule.startTime &&
+        appointment.endTime <= schedule.endTime,
+    );
 
+    let start = schedule.startTime;
+    let end = addMinutesToTime(start, duration);
+
+    for (const appointment of insideSchedule) {
+      // هل نستطيع الحجز قبل هذا الموعد؟
+      const candidateEnd = addMinutesToTime(
+        start,
+        duration,
+      );
+
+      if (candidateEnd <= appointment.startTime) {
+        end = candidateEnd;
+        break;
+      }
+
+      start = appointment.endTime;
+      end = addMinutesToTime(start, duration);
+
+
+    }
+    const overlappingBreak = breakSchedules.find((breakSchedule) =>
+      this.isOverlap(
+        start,
+        end,
+        breakSchedule.startTime,
+        breakSchedule.endTime,
+      ),
+    );
+
+    if (overlappingBreak) {
+      start = overlappingBreak.endTime;
+      end = addMinutesToTime(start, duration);
+    }
+    const hasFullDayLeave = leaves.some(
+      leave => !leave.startTime && !leave.endTime,
+    );
+
+    if (hasFullDayLeave) {
+      throw new BadRequestException(
+        'Doctor is on leave',
+      );
+    }
+
+    const overlapsLeave = leaves.some(leave => {
+      if (!leave.startTime || !leave.endTime) {
+        return false;
+      }
+
+      return this.isOverlap(
+        start,
+        end,
+        leave.startTime,
+        leave.endTime,
+      );
+    });
+
+    if (overlapsLeave) {
+      throw new BadRequestException(
+        'Doctor leave overlaps appointment',
+      );
+    }
     if (end > schedule.endTime) {
       throw new BadRequestException('No available time in this schedule');
     }
-
+    */
+    if (end > schedule.endTime) {
+      throw new BadRequestException('No available time in this schedule');
+    }
     return {
       startTime: start,
       endTime: end,
     };
+    //r
   }
+
   /*private addMinutes(time: string, minutes: number): string {
     const [h, m, s] = time.split(':').map(Number);
 
@@ -1501,7 +1807,7 @@ export class AppointmentsService {
 
     return date.toTimeString().slice(0, 8);
   }*/
-  async getWaitList(dto: WaitListDto) {
+  /*async getWaitList(dto: WaitListDto) {
     const appointments = await this.appointmentRepository
       .createQueryBuilder('appointment')
       .where('appointment.doctorId = :doctorId', {
@@ -1524,7 +1830,7 @@ export class AppointmentsService {
       startTime: appointment.startTime,
       endTime: appointment.endTime,
     }));
-  }
+  }*/
   async getAvailableDays(dto: AvailableDaysDto) {
     const schedules = await this.doctorScheduleRepository.find({
       where: {
@@ -1567,12 +1873,10 @@ export class AppointmentsService {
       );
 
       if (hasSchedule) {
-        const dateString =
-          toDateString(today);
+        const dateString = toDateString(today);
 
         const hasFullDayLeave = leaves.some((leave) => {
-          const leaveDate = new Date(leave.exceptionDate);
-          leaveDate.setHours(12, 0, 0, 0);
+          const leaveDate = toDateOnly(leave.exceptionDate);
 
           return (
             toDateString(leaveDate) === dateString &&
@@ -1580,6 +1884,7 @@ export class AppointmentsService {
             leave.endTime === null
           );
         });
+
 
         if (!hasFullDayLeave) {
           result.push({
@@ -1596,17 +1901,13 @@ export class AppointmentsService {
   }
   async processDailyNoShows(): Promise<void> {
     /*const yesterday = new Date();
-
+ 
     yesterday.setDate(yesterday.getDate() - 1);
-
+ 
     const yesterdayString = yesterday.toISOString().split('T')[0];*/
-    const yesterday = addDays(
-      nowDate(),
-      -1,
-    );
+    const yesterday = addDays(nowDate(), -1);
 
-    const yesterdayString =
-      toDateString(yesterday);
+    const yesterdayString = toDateString(yesterday);
 
     const appointments = await this.appointmentRepository
 
@@ -1646,12 +1947,41 @@ export class AppointmentsService {
     });
 
     for (const result of results) {
-      await this.eventEmitter.emitAsync(AppointmentNoShowEvent.eventName, result.noShowEvent);
+      await this.eventEmitter.emitAsync(
+        AppointmentNoShowEvent.eventName,
+        result.noShowEvent,
+      );
 
       if (result.suspendedEvent) {
-        await this.eventEmitter.emitAsync(PatientSuspendedEvent.eventName, result.suspendedEvent);
+        await this.eventEmitter.emitAsync(
+          PatientSuspendedEvent.eventName,
+          result.suspendedEvent,
+        );
       }
     }
+  }
+  private async hasAvailableSlot(
+    doctorId: number,
+    clinicId: number,
+    requestedDate: string,
+  ): Promise<boolean> {
+
+    const settings =
+      await this.systemSettingsService.getSettings();
+
+    const minimumDuration = Math.min(
+      settings.initialVisitDuration,
+      settings.returnVisitDuration,
+    );
+
+    return !(
+      await this.waitlistService.isDayFullyBooked(
+        doctorId,
+        clinicId,
+        requestedDate,
+        minimumDuration,
+      )
+    );
   }
 
   //
