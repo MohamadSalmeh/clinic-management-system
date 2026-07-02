@@ -20,6 +20,9 @@ import { Payment } from '../payments/entities/payment.entity';
 import { PatientViolation } from '../patient-violations/entities/patient-violation.entity';
 import { AppointmentsCron } from './appointments.cron';
 import { ReferralsModule } from '../referrals/referrals.module';
+import { SystemSettingsModule } from '../system-setting/system-settings.module';
+import { WaitlistModule } from '../waitlists/waitlists.module';
+import { Waitlist } from '../waitlists/entities/waitlist.entity';
 
 @Module({
   imports: [
@@ -37,9 +40,12 @@ import { ReferralsModule } from '../referrals/referrals.module';
       Payment,
       PatientViolation,
       User,
+      Waitlist
     ]),
     AuthModule,
     MedicalProfilesModule,
+    SystemSettingsModule,
+    WaitlistModule,
     forwardRef(() => QueuesModule), // الإضافة هنا لربط موديول الـ Queue
     forwardRef(() => ReferralsModule)
   ],
@@ -47,4 +53,4 @@ import { ReferralsModule } from '../referrals/referrals.module';
   providers: [AppointmentsService, AppointmentsCron],
   exports: [TypeOrmModule, AppointmentsService],
 })
-export class AppointmentsModule {}
+export class AppointmentsModule { }

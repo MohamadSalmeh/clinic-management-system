@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { Repository, DataSource, EntityManager, Brackets } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 import {
@@ -32,7 +32,11 @@ import { addDays, endOfDay, nowDate } from '../common/utils/date-utils';
 import { DoctorClinic } from '../doctor-clinics/entities/doctor-clinic.entity';
 import { SystemSetting } from '../system-setting/entities/system-setting.entity';
 import { CancelReferralDto } from './dto/cancel-referral.dto';
-import { ReferralCreatedEvent, ReferralCancelledEvent, ReferralExpiringEvent } from '../notifications/events';
+import {
+  ReferralCreatedEvent,
+  ReferralCancelledEvent,
+  ReferralExpiringEvent,
+} from '../notifications/events';
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -94,7 +98,6 @@ export class ReferralsService {
     let toDoctorId = dto.toDoctorId ?? null;
     let toClinicId = dto.toClinicId ?? null;
 
-    // [💡 إصلاح النقطة 2]: التعامل الصارم مع نوع المراجعات
     if (dto.type === ReferralType.FOLLOW_UP) {
       if (dto.toDoctorId && dto.toDoctorId !== fromDoctorId) {
         throw new BadRequestException(
@@ -102,12 +105,11 @@ export class ReferralsService {
         );
       }
       toDoctorId = fromDoctorId;
-      toClinicId = null; // المراجعة لنفس الطبيب لا تحتاج لعيادة أخرى
+      toClinicId = null;
     } else if (dto.type === ReferralType.EXTERNAL) {
       await this.validateReferralTargets(toClinicId, toDoctorId);
     }
 
-    // [💡 إصلاح النقطة 1]: الـ Anti-Spam Check المعالج والآمن بالـ QueryBuilder
     const queryBuilder = this.referralRepository
       .createQueryBuilder('referral')
       .where('referral.patientId = :patientId', { patientId: dto.patientId })
@@ -222,7 +224,8 @@ export class ReferralsService {
       queryBuilder.andWhere('referral.type = :type', { type: queryDto.type });
     }
 
-    queryBuilder.orderBy('referral.createdAt', 'DESC').skip(skip).take(limit);
+    // ✅ التصحيح: createdAt → created_at
+    queryBuilder.orderBy('referral.created_at', 'DESC').skip(skip).take(limit);
 
     const [data, total] = await queryBuilder.getManyAndCount();
     const totalPages = Math.ceil(total / limit);
@@ -255,7 +258,6 @@ export class ReferralsService {
         currentDoctorId: doctor.id,
       });
 
-    // [💡 إصلاح النقطة 7]: التصفية الافتراضية الذكية مع إمكانية التمرير المخصص
     if (queryDto.status) {
       queryBuilder.andWhere('referral.status = :status', {
         status: queryDto.status,
@@ -266,7 +268,8 @@ export class ReferralsService {
       });
     }
 
-    queryBuilder.orderBy('referral.createdAt', 'DESC').skip(skip).take(limit);
+    // ✅ التصحيح: createdAt → created_at
+    queryBuilder.orderBy('referral.created_at', 'DESC').skip(skip).take(limit);
 
     const [data, total] = await queryBuilder.getManyAndCount();
     const totalPages = Math.ceil(total / limit);
@@ -308,7 +311,8 @@ export class ReferralsService {
       });
     }
 
-    queryBuilder.orderBy('referral.createdAt', 'DESC').skip(skip).take(limit);
+    // ✅ التصحيح: createdAt → created_at
+    queryBuilder.orderBy('referral.created_at', 'DESC').skip(skip).take(limit);
 
     const [data, total] = await queryBuilder.getManyAndCount();
     const totalPages = Math.ceil(total / limit);
@@ -326,7 +330,6 @@ export class ReferralsService {
 
     const now = nowDate();
 
-    // [💡 إصلاح النقطة 8]: دعم الـ NULL والتحقق الصارم في نفس الوقت لشاشة الحجز للمريض
     return await this.referralRepository
       .createQueryBuilder('referral')
       .leftJoinAndSelect('referral.toClinic', 'toClinic')
@@ -346,54 +349,145 @@ export class ReferralsService {
   // ==========================================
 
   async findAllReferralsForAdmin(
-    queryDto: ReferralQueryDto,
-  ): Promise<PaginatedResponse<Referral>> {
-    const page = Number(queryDto.page) || 1;
-    const limit = Number(queryDto.limit) || 10;
-    const skip = (page - 1) * limit;
+  queryDto: ReferralQueryDto,
+): Promise<PaginatedResponse<Referral>> {
+  const page = Number(queryDto.page) || 1;
+  const limit = Number(queryDto.limit) || 10;
+  const skip = (page - 1) * limit;
 
-    const queryBuilder = this.referralRepository
-      .createQueryBuilder('referral')
-      .leftJoinAndSelect('referral.patient', 'patient')
-      .leftJoinAndSelect('patient.user', 'patientUser')
-      .leftJoinAndSelect('referral.fromDoctor', 'fromDoctor')
-      .leftJoinAndSelect('fromDoctor.user', 'fromDoctorUser')
-      .leftJoinAndSelect('referral.toDoctor', 'toDoctor')
-      .leftJoinAndSelect('toDoctor.user', 'toDoctorUser')
-      .leftJoinAndSelect('referral.toClinic', 'toClinic')
-      .leftJoinAndSelect('referral.appointment', 'appointment');
+  const queryBuilder = this.referralRepository
+    .createQueryBuilder('referral')
+    .leftJoinAndSelect('referral.patient', 'patient')
+    .leftJoinAndSelect('patient.user', 'patientUser')
+    .leftJoinAndSelect('referral.fromDoctor', 'fromDoctor')
+    .leftJoinAndSelect('fromDoctor.user', 'fromDoctorUser')
+    .leftJoinAndSelect('referral.toDoctor', 'toDoctor')
+    .leftJoinAndSelect('toDoctor.user', 'toDoctorUser')
+    .leftJoinAndSelect('referral.toClinic', 'toClinic')
+    .leftJoinAndSelect('referral.appointment', 'appointment');
 
-    if (queryDto.patientId) {
-      queryBuilder.andWhere('referral.patientId = :patientId', {
-        patientId: Number(queryDto.patientId),
-      });
-    }
-    if (queryDto.fromDoctorId) {
-      queryBuilder.andWhere('referral.fromDoctorId = :fromDoctorId', {
-        fromDoctorId: Number(queryDto.fromDoctorId),
-      });
-    }
-    if (queryDto.toClinicId) {
-      queryBuilder.andWhere('referral.toClinicId = :toClinicId', {
-        toClinicId: Number(queryDto.toClinicId),
-      });
-    }
-    if (queryDto.status) {
-      queryBuilder.andWhere('referral.status = :status', {
-        status: queryDto.status,
-      });
-    }
-    if (queryDto.type) {
-      queryBuilder.andWhere('referral.type = :type', { type: queryDto.type });
-    }
+  // ==========================================
+  // الفلاتر الأساسية (IDs)
+  // ==========================================
 
-    queryBuilder.orderBy('referral.createdAt', 'DESC').skip(skip).take(limit);
-
-    const [data, total] = await queryBuilder.getManyAndCount();
-    const totalPages = Math.ceil(total / limit);
-
-    return { data, meta: { total, page, limit, totalPages } };
+  if (queryDto.patientId) {
+    queryBuilder.andWhere('referral.patientId = :patientId', {
+      patientId: Number(queryDto.patientId),
+    });
   }
+
+  if (queryDto.fromDoctorId) {
+    queryBuilder.andWhere('referral.fromDoctorId = :fromDoctorId', {
+      fromDoctorId: Number(queryDto.fromDoctorId),
+    });
+  }
+
+  if (queryDto.toDoctorId) {
+    queryBuilder.andWhere('referral.toDoctorId = :toDoctorId', {
+      toDoctorId: Number(queryDto.toDoctorId),
+    });
+  }
+
+  // دعم كل من toClinicId و clinicId (مرونة)
+  const clinicId = queryDto.toClinicId ?? queryDto.clinicId;
+  if (clinicId) {
+    queryBuilder.andWhere('referral.toClinicId = :clinicId', {
+      clinicId: Number(clinicId),
+    });
+  }
+
+  if (queryDto.status) {
+    queryBuilder.andWhere('referral.status = :status', {
+      status: queryDto.status,
+    });
+  }
+
+  if (queryDto.type) {
+    queryBuilder.andWhere('referral.type = :type', { type: queryDto.type });
+  }
+
+  // ==========================================
+  // ✅ فلتر حسب تخصص الدكتور (من الـ DoctorProfile)
+  // ==========================================
+  if (queryDto.specialization) {
+    queryBuilder.andWhere(
+      new Brackets((qb) => {
+        qb.where('fromDoctor.specialization ILike :specialization', {
+          specialization: `%${queryDto.specialization}%`,
+        }).orWhere('toDoctor.specialization ILike :specialization', {
+          specialization: `%${queryDto.specialization}%`,
+        });
+      }),
+    );
+  }
+
+  // ==========================================
+  // ✅ فلتر حسب اسم العيادة
+  // ==========================================
+  if (queryDto.clinicName) {
+    queryBuilder.andWhere('toClinic.name ILike :clinicName', {
+      clinicName: `%${queryDto.clinicName}%`,
+    });
+  }
+
+  // ==========================================
+  // ✅ فلتر حسب اسم المريض
+  // ==========================================
+  if (queryDto.patientName) {
+    queryBuilder.andWhere(
+      new Brackets((qb) => {
+        qb.where('patientUser.firstName ILike :patientName', {
+          patientName: `%${queryDto.patientName}%`,
+        }).orWhere('patientUser.lastName ILike :patientName', {
+          patientName: `%${queryDto.patientName}%`,
+        });
+      }),
+    );
+  }
+
+  // ==========================================
+  // ✅ فلتر حسب اسم الدكتور المرسل
+  // ==========================================
+  if (queryDto.fromDoctorName) {
+    queryBuilder.andWhere(
+      new Brackets((qb) => {
+        qb.where('fromDoctorUser.firstName ILike :fromDoctorName', {
+          fromDoctorName: `%${queryDto.fromDoctorName}%`,
+        }).orWhere('fromDoctorUser.lastName ILike :fromDoctorName', {
+          fromDoctorName: `%${queryDto.fromDoctorName}%`,
+        });
+      }),
+    );
+  }
+
+  // ==========================================
+  // ✅ البحث العام (Search)
+  // ==========================================
+  if (queryDto.search) {
+    const search = `%${queryDto.search}%`;
+    queryBuilder.andWhere(
+      new Brackets((qb) => {
+        qb.where('patientUser.firstName ILike :search', { search })
+          .orWhere('patientUser.lastName ILike :search', { search })
+          .orWhere('patientUser.phone ILike :search', { search })
+          .orWhere('patientUser.email ILike :search', { search })
+          .orWhere('fromDoctorUser.firstName ILike :search', { search })
+          .orWhere('fromDoctorUser.lastName ILike :search', { search })
+          .orWhere('toDoctorUser.firstName ILike :search', { search })
+          .orWhere('toDoctorUser.lastName ILike :search', { search })
+          .orWhere('toClinic.name ILike :search', { search })
+          .orWhere('referral.reason ILike :search', { search });
+      }),
+    );
+  }
+
+  queryBuilder.orderBy('referral.created_at', 'DESC').skip(skip).take(limit);
+
+  const [data, total] = await queryBuilder.getManyAndCount();
+  const totalPages = Math.ceil(total / limit);
+
+  return { data, meta: { total, page, limit, totalPages } };
+}
 
   async findOne(id: number): Promise<Referral> {
     const referral = await this.referralRepository.findOne({
@@ -416,7 +510,6 @@ export class ReferralsService {
     id: number,
     dto: CancelReferralDto,
   ): Promise<Referral> {
-    // 1. جلب كرت التحويل للتأكد من وجوده
     const referral = await this.referralRepository.findOne({
       where: { id },
       relations: ['patient'],
@@ -425,7 +518,6 @@ export class ReferralsService {
       throw new NotFoundException('Referral not found');
     }
 
-    // 2. فحص الحالات الاستثنائية (التحويل المكتمل أو الملغي مسبقاً)
     if (referral.status === ReferralStatus.COMPLETED) {
       throw new BadRequestException(
         'Cannot cancel an already completed referral',
@@ -437,12 +529,10 @@ export class ReferralsService {
       );
     }
 
-    // 3. تعديل الحالة وتعبئة حقول الإلغاء المنفصلة بنظافة تامة
     referral.status = ReferralStatus.EXPIRED;
     referral.cancellationReason = dto.cancellationReason.trim();
-    referral.cancelledAt = nowDate(); // استخدام مصدر الوقت الموحد للمشروع
+    referral.cancelledAt = nowDate();
 
-    // 4. حفظ وإعادة الكيان المحدث
     const updatedReferral = await this.referralRepository.save(referral);
 
     if (referral.patient?.userId) {
@@ -485,7 +575,6 @@ export class ReferralsService {
       );
     }
 
-    // [💡 إصلاح النقطة 4 - الأهم]: عدم عمل .save() لمنع حدوث التخريب المسبق إذا فشلت خطوات الحجز اللاحقة
     if (referral.expiresAt && referral.expiresAt < nowDate()) {
       throw new BadRequestException('This referral has expired');
     }
@@ -521,7 +610,6 @@ export class ReferralsService {
       ? manager.getRepository(Referral)
       : this.referralRepository;
 
-    // ✅ إضافة القفل المتشائم والتحقق من appointmentId
     if (!appointmentId) {
       throw new BadRequestException('Valid appointment ID is required');
     }
@@ -579,7 +667,6 @@ export class ReferralsService {
     const now = nowDate();
     const threeDaysFromNow = endOfDay(addDays(now, 3));
 
-    // [💡 إصلاح النقطة 9]: إضافة شرط عدم انتهاء الصلاحية الفعلي لعدم إرسال إشعارات خاطئة
     const expiringReferrals = await this.referralRepository
       .createQueryBuilder('referral')
       .leftJoinAndSelect('referral.patient', 'patient')
@@ -649,7 +736,6 @@ export class ReferralsService {
   private async calculateExpirationDate(type: ReferralType): Promise<Date> {
     const now = nowDate();
 
-    // [💡 إصلاح النقطة 10]: صمام الأمان باستخدام الـ Optional Chaining لعدم انهيار الكود لو كانت الإعدادات فارغة
     const settings = await this.dataSource
       .getRepository(SystemSetting)
       .findOne({

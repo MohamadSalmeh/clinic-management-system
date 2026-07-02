@@ -9,6 +9,8 @@ import { Queue } from '../../queues/entities/queue.entity';
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 import { MedicalHistory } from '../../medical-histories/entities/medical-history.entity';
 import { Referral } from '../../referrals/entities/referral.entity';
+import { Transform } from 'class-transformer';
+import { toDateString } from '../../common/utils/date-utils';
 
 @Entity({ name: 'appointments' })
 @Check(`"end_time" > "start_time"`)
@@ -44,7 +46,7 @@ export class Appointment extends BaseEntity {
     enum: ['paid', 'unpaid', 'partial', 'refunded'],
   })
   paymentStatus!: string;*/
-
+@Transform(({ value }) => toDateString(value), { toPlainOnly: true })
   @Column({ name: 'requested_date', type: 'date' })
   requestedDate!: Date;
 
@@ -53,10 +55,14 @@ export class Appointment extends BaseEntity {
 
   @Column({ name: 'end_time', type: 'time' })
   endTime!: string;
-
+@Transform(({ value }) => value ? toDateString(value) : null, {
+  toPlainOnly: true,
+})
   @Column({ name: 'actual_start_time', type: 'timestamp', nullable: true })
   actualStartTime!: Date | null;
-
+@Transform(({ value }) => value ? toDateString(value) : null, {
+  toPlainOnly: true,
+})
   @Column({ name: 'actual_end_time', type: 'timestamp', nullable: true })
   actualEndTime!: Date | null;
 
@@ -68,10 +74,14 @@ export class Appointment extends BaseEntity {
 
   @Column({ name: 'cancellation_reason', type: 'text', nullable: true })
   cancellationReason!: string | null;
-
+@Transform(({ value }) => value ? toDateString(value) : null, {
+  toPlainOnly: true,
+})
   @Column({ name: 'cancelled_at', type: 'timestamp', nullable: true })
   cancelledAt!: Date | null;
-
+@Transform(({ value }) => value ? toDateString(value) : null, {
+  toPlainOnly: true,
+})
   @Column({ name: 'checkin_time', type: 'timestamp', nullable: true })
   checkinTime!: Date | null;
 

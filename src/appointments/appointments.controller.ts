@@ -150,11 +150,11 @@ export class AppointmentsController {
     return this.appointmentsService.calculateNextAvailableTime(dto);
   }
 
-  @Post('wait-list')
+  /*@Post('wait-list')
   @Roles(UserRole.PATIENT)
   getWaitList(@Body() dto: WaitListDto) {
     return this.appointmentsService.getWaitList(dto);
-  }
+  }*/
   @Post('available-days')
   @Roles(UserRole.PATIENT)
   getAvailableDays(@Body() dto: AvailableDaysDto) {

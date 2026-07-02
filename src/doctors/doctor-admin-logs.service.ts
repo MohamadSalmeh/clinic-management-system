@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { DoctorAdminLog, DoctorAdminLogType } from './entities/doctor-admin-log.entity';
 import { DoctorProfile } from './entities/doctor-profile.entity';
 import { DoctorAdminLogQueryDto } from './dto';
+import { startOfDay, endOfDay } from '../common/utils/date-utils';
 
 @Injectable()
 export class DoctorAdminLogsService {
@@ -71,11 +72,15 @@ export class DoctorAdminLogsService {
     }
 
     if (query.fromDate) {
-      qb.andWhere('log.created_at >= :fromDate', { fromDate: query.fromDate });
+      qb.andWhere('log.created_at >= :fromDate', { 
+        fromDate: startOfDay(query.fromDate) 
+      });
     }
 
     if (query.toDate) {
-      qb.andWhere('log.created_at <= :toDate', { toDate: query.toDate });
+      qb.andWhere('log.created_at <= :toDate', { 
+        toDate: endOfDay(query.toDate) 
+      });
     }
 
     return qb.orderBy('log.created_at', 'DESC').getMany();

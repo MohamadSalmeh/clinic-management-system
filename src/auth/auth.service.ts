@@ -38,6 +38,7 @@ import { OtpService } from './services/otp.service';
 import { MailService } from '../mail/mail.service';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { WalletStatus } from '../wallets/enums/wallet-status.enum';
+import { toDateOnly, nowDate, addMinutes } from '../common/utils/date-utils';
 
 type RefreshTokenPayload = Pick<JWTPayloadType, 'sub' | 'version'>;
 type AccountStatus = {
@@ -63,8 +64,8 @@ export class AuthService {
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
     @InjectRepository(Wallet)
-    private readonly walletRepository: Repository<Wallet>
-  ) { }
+    private readonly walletRepository: Repository<Wallet>,
+  ) {}
 
   async register(registerDto: RegisterDto): Promise<User> {
     const normalizedEmail = this.normalizeEmail(registerDto.email);
@@ -72,15 +73,22 @@ export class AuthService {
 
     this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
 
-    const existingUser = await this.findExistingUser(normalizedEmail, normalizedPhone);
+    const existingUser = await this.findExistingUser(
+      normalizedEmail,
+      normalizedPhone,
+    );
 
     if (existingUser) {
       if (existingUser.isVerified) {
-        throw new ConflictException('User with this email or phone already exists');
+        throw new ConflictException(
+          'User with this email or phone already exists',
+        );
       }
 
       if (this.isGoogleAccount(existingUser)) {
-        throw new ConflictException('User with this email or phone already exists');
+        throw new ConflictException(
+          'User with this email or phone already exists',
+        );
       }
 
       const hashedPassword = await this.authHelperProvider.hashPassword(
@@ -95,7 +103,8 @@ export class AuthService {
       existingUser.firstName = registerDto.firstName;
       existingUser.fatherName = registerDto.fatherName;
       existingUser.lastName = registerDto.lastName;
-      existingUser.birthDate = new Date(registerDto.birthDate);
+      // ✅ التعديل: استخدام toDateOnly بدلاً من new Date
+      existingUser.birthDate = toDateOnly(registerDto.birthDate);
       existingUser.gender = registerDto.gender;
       existingUser.address = registerDto.address;
       existingUser.status = UserStatus.ACTIVE;
@@ -136,7 +145,8 @@ export class AuthService {
       firstName: registerDto.firstName,
       fatherName: registerDto.fatherName,
       lastName: registerDto.lastName,
-      birthDate: new Date(registerDto.birthDate),
+      // ✅ التعديل: استخدام toDateOnly بدلاً من new Date
+      birthDate: toDateOnly(registerDto.birthDate),
       gender: registerDto.gender,
       address: registerDto.address,
       avatarUrl: registerDto.avatarUrl ?? null,
@@ -182,10 +192,15 @@ export class AuthService {
 
     this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
 
-    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+    const user = await this.findUserByIdentifier(
+      normalizedEmail,
+      normalizedPhone,
+    );
 
     if (this.isGoogleAccount(user)) {
-      throw new BadRequestException('Password reset is not supported for Google accounts');
+      throw new BadRequestException(
+        'Password reset is not supported for Google accounts',
+      );
     }
 
     const { code, expiresAt } = await this.generateVerificationCode();
@@ -200,14 +215,15 @@ export class AuthService {
         preferEmail: Boolean(normalizedEmail),
       });
     } catch (error) {
-      this.logger.error('Failed to send reset OTP', error instanceof Error ? error.stack : undefined);
+      this.logger.error(
+        'Failed to send reset OTP',
+        error instanceof Error ? error.stack : undefined,
+      );
       throw error;
     }
 
     return { message: 'Reset code sent successfully' };
   }
-
-
 
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
     const normalizedEmail = this.normalizeEmail(dto.email);
@@ -215,19 +231,30 @@ export class AuthService {
 
     this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
 
-    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+    const user = await this.findUserByIdentifier(
+      normalizedEmail,
+      normalizedPhone,
+    );
 
     if (this.isGoogleAccount(user)) {
-      throw new BadRequestException('Password reset is not supported for Google accounts');
+      throw new BadRequestException(
+        'Password reset is not supported for Google accounts',
+      );
     }
 
     if (!user.verificationCode || !user.verificationCodeExpiresAt) {
       throw new UnauthorizedException('Invalid or expired verification code');
     }
 
+    // ✅ التعديل: استخدام toDateOnly للمقارنة (أو keep as Date مع الوقت)
+    // لكن هنا نحتاج مقارنة الوقت بالضبط، لذا نستخدم new Date مع nowDate()
     const expiresAt = new Date(user.verificationCodeExpiresAt);
 
-    if (user.verificationCode !== dto.code || expiresAt.getTime() < Date.now()) {
+    // ✅ التعديل: استخدام nowDate() بدلاً من Date.now()
+    if (
+      user.verificationCode !== dto.code ||
+      expiresAt.getTime() < nowDate().getTime()
+    ) {
       throw new UnauthorizedException('Invalid or expired verification code');
     }
 
@@ -339,19 +366,29 @@ export class AuthService {
 
     this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
 
-    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+    const user = await this.findUserByIdentifier(
+      normalizedEmail,
+      normalizedPhone,
+    );
 
     if (this.isGoogleAccount(user)) {
-      throw new BadRequestException('Google accounts do not require verification');
+      throw new BadRequestException(
+        'Google accounts do not require verification',
+      );
     }
 
     if (!user.verificationCode || !user.verificationCodeExpiresAt) {
       throw new UnauthorizedException('Invalid or expired verification code 1');
     }
 
+    // ✅ التعديل: استخدام new Date مع nowDate() للمقارنة
     const expiresAt = new Date(user.verificationCodeExpiresAt);
 
-    if (user.verificationCode !== dto.code || expiresAt.getTime() < Date.now()) {
+    // ✅ التعديل: استخدام nowDate() بدلاً من Date.now()
+    if (
+      user.verificationCode !== dto.code ||
+      expiresAt.getTime() < nowDate().getTime()
+    ) {
       throw new UnauthorizedException('Invalid or expired verification code 2');
     }
 
@@ -364,16 +401,23 @@ export class AuthService {
     return { message: 'Account verified successfully' };
   }
 
-  async resendVerification(dto: ForgotPasswordDto): Promise<{ message: string }> {
+  async resendVerification(
+    dto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
     const normalizedEmail = this.normalizeEmail(dto.email);
     const normalizedPhone = this.normalizePhone(dto.phone);
 
     this.assertSingleIdentifier(normalizedEmail, normalizedPhone);
 
-    const user = await this.findUserByIdentifier(normalizedEmail, normalizedPhone);
+    const user = await this.findUserByIdentifier(
+      normalizedEmail,
+      normalizedPhone,
+    );
 
     if (this.isGoogleAccount(user)) {
-      throw new BadRequestException('Google accounts do not require verification');
+      throw new BadRequestException(
+        'Google accounts do not require verification',
+      );
     }
 
     if (user.isVerified) {
@@ -405,7 +449,8 @@ export class AuthService {
 
     if (user.role === UserRole.PATIENT) {
       try {
-        const completion = await this.medicalProfilesService.getCompletionStatus(userId);
+        const completion =
+          await this.medicalProfilesService.getCompletionStatus(userId);
         isProfileCompleted = completion.completed;
       } catch (error) {
         if (error instanceof NotFoundException) {
@@ -461,7 +506,9 @@ export class AuthService {
           existingUserWithEmail.providerId &&
           existingUserWithEmail.providerId !== googleData.googleId
         ) {
-          throw new UnauthorizedException('Google account does not match this user');
+          throw new UnauthorizedException(
+            'Google account does not match this user',
+          );
         }
 
         existingUserWithEmail.providerId = googleData.googleId;
@@ -500,9 +547,8 @@ export class AuthService {
   async validateDoctorInviteToken(
     token: string,
   ): Promise<{ valid: true; email: string }> {
-    const invitation = await this.doctorInvitationsService.getValidInvitationByToken(
-      token,
-    );
+    const invitation =
+      await this.doctorInvitationsService.getValidInvitationByToken(token);
 
     return { valid: true, email: invitation.email };
   }
@@ -511,11 +557,12 @@ export class AuthService {
     token: string,
     dto: DoctorInviteRegisterDto,
   ): Promise<AuthResponse> {
-    const invitation = await this.doctorInvitationsService.getValidInvitationByToken(
-      token,
-    );
+    const invitation =
+      await this.doctorInvitationsService.getValidInvitationByToken(token);
     const normalizedEmail = invitation.email.trim().toLowerCase();
-    const hashedPassword = await this.authHelperProvider.hashPassword(dto.password);
+    const hashedPassword = await this.authHelperProvider.hashPassword(
+      dto.password,
+    );
 
     const user = await this.createDoctorUserFromInvitation(invitation, {
       email: normalizedEmail,
@@ -539,9 +586,8 @@ export class AuthService {
     token: string,
     googleData: GoogleUserData,
   ): Promise<AuthResponse> {
-    const invitation = await this.doctorInvitationsService.getValidInvitationByToken(
-      token,
-    );
+    const invitation =
+      await this.doctorInvitationsService.getValidInvitationByToken(token);
     const normalizedEmail = googleData.email.trim().toLowerCase();
 
     if (normalizedEmail !== invitation.email) {
@@ -706,7 +752,10 @@ export class AuthService {
     return normalized.length > 0 ? normalized : null;
   }
 
-  private assertSingleIdentifier(email: string | null, phone: string | null): void {
+  private assertSingleIdentifier(
+    email: string | null,
+    phone: string | null,
+  ): void {
     const hasEmail = Boolean(email);
     const hasPhone = Boolean(phone);
 
@@ -727,8 +776,6 @@ export class AuthService {
       return this.userRepository.findOne({
         where: { email },
       });
-
-
     }
 
     if (phone) {
@@ -783,7 +830,6 @@ export class AuthService {
     throw new BadRequestException('User contact information is missing');
   }
 
-
   private async buildAuthResponse(user: User): Promise<AuthResponse> {
     const accessPayload = this.buildJwtPayload(user);
     const refreshPayload = this.buildRefreshTokenPayload(user);
@@ -793,9 +839,9 @@ export class AuthService {
       this.generateRefreshToken(refreshPayload),
     ]);
 
-    const decodedToken = this.jwtService.decode(accessToken) as
-      | Partial<JWTPayloadType>
-      | null;
+    const decodedToken = this.jwtService.decode(
+      accessToken,
+    ) as Partial<JWTPayloadType> | null;
 
     if (!decodedToken?.sub) {
       throw new UnauthorizedException('Failed to generate a valid token');
@@ -812,7 +858,9 @@ export class AuthService {
         phone: user.phone ?? null,
         provider: user.provider,
         role: user.role,
-        fullName: `${user.firstName} ${user.lastName}`.replace(/\s+/g, ' ').trim(),
+        fullName: `${user.firstName} ${user.lastName}`
+          .replace(/\s+/g, ' ')
+          .trim(),
       },
       profileCompleted,
     };
@@ -860,9 +908,13 @@ export class AuthService {
     });
   }
 
-  private async generateVerificationCode(): Promise<{ code: string; expiresAt: Date }> {
+  private async generateVerificationCode(): Promise<{
+    code: string;
+    expiresAt: Date;
+  }> {
     const code = await this.otpService.generateOtp(6);
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    // ✅ التعديل: استخدام addMinutes() و nowDate()
+    const expiresAt = addMinutes(nowDate(), 15);
 
     return { code, expiresAt };
   }
@@ -873,12 +925,7 @@ export class AuthService {
     const hasAddress = Boolean(user.address?.trim());
 
     return Boolean(
-      user.gender &&
-      user.birthDate &&
-      hasFatherName &&
-      hasPhone &&
-      hasAddress,
+      user.gender && user.birthDate && hasFatherName && hasPhone && hasAddress,
     );
   }
-
 }

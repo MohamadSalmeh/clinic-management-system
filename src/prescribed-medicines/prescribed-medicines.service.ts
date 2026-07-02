@@ -21,6 +21,7 @@ import { ActiveUserData } from '../utils';
 import { CreatePrescribedMedicineDto } from './dto/create-prescribed-medicine.dto';
 import { UpdateMedicineStatusDto } from './dto/update-medicine-status.dto';
 import { MedicinePrescribedEvent } from '../notifications/events';
+import { toDateOnly } from '../common/utils/date-utils';
 
 @Injectable()
 export class PrescribedMedicinesService {
@@ -166,11 +167,11 @@ export class PrescribedMedicinesService {
             frequency: dto.frequency ?? null,
 
             startDate: dto.startDate
-                ? new Date(dto.startDate)
+                ? toDateOnly(dto.startDate)
                 : null,
 
             endDate: dto.endDate
-                ? new Date(dto.endDate)
+                ? toDateOnly(dto.endDate)
                 : null,
 
             notes: dto.notes ?? null,
@@ -438,7 +439,7 @@ export class PrescribedMedicinesService {
             );
         }
 
-        if (Number(medicine.userId )=== Number(currentUser.sub)) {
+        if (Number(medicine.userId) === Number(currentUser.sub)) {
 
             medicine.status = dto.status;
 

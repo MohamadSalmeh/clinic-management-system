@@ -7,6 +7,7 @@ import { User } from '../users/entities/user.entity';
 import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
 import { DoctorAdminLogsService } from './doctor-admin-logs.service';
 import { DoctorAdminLogType } from './entities/doctor-admin-log.entity';
+import { toDateOnly } from '../common/utils/date-utils'; // ✅ إضافة الاستيراد
 
 export type DoctorProfileCompletionStatus = {
   isComplete: boolean;
@@ -55,8 +56,9 @@ export class DoctorsService {
       profile.user.gender = dto.gender;
     }
 
+    // ✅ التعديل: استبدال new Date بـ toDateOnly
     if (dto.birthDate !== undefined && profile.user) {
-      profile.user.birthDate = new Date(dto.birthDate);
+      profile.user.birthDate = toDateOnly(dto.birthDate);
     }
 
     if (dto.specialization !== undefined) {
