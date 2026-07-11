@@ -10,7 +10,7 @@ import { DataSource, Not, Repository } from 'typeorm';
 import { Appointment } from '../appointments/entities/appointment.entity';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { CreateDoctorScheduleDto, DoctorScheduleSlotDto } from './dto';
-import { DoctorSchedule } from './entities/doctor-schedule.entity';
+import { DoctorSchedule, DoctorScheduleType } from './entities/doctor-schedule.entity';
 import {
   DoctorScheduleRequest,
   DoctorScheduleRequestStatus,
@@ -18,6 +18,7 @@ import {
 import { DoctorAdminLogsService } from '../doctors/doctor-admin-logs.service';
 import { DoctorAdminLogType } from '../doctors/entities/doctor-admin-log.entity';
 import { DoctorScheduleRequestApprovedEvent, DoctorScheduleRequestRejectedEvent } from '../notifications/events';
+import { DoctorClinic } from '../doctor-clinics/entities/doctor-clinic.entity';
 
 @Injectable()
 export class DoctorSchedulesService {
@@ -35,7 +36,9 @@ export class DoctorSchedulesService {
     private readonly dataSource: DataSource,
     private readonly doctorAdminLogsService: DoctorAdminLogsService,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+    @InjectRepository(DoctorClinic)
+    private readonly doctorClinicRepository: Repository<DoctorClinic>,
+  ) { }
 
   async createOrUpdateWeeklyTemplate(
     userId: number,
@@ -47,6 +50,19 @@ export class DoctorSchedulesService {
 
     if (!doctorProfile) {
       throw new NotFoundException('Doctor profile not found');
+    }
+    const doctorClinic =
+      await this.doctorClinicRepository.findOne({
+        where: {
+          doctorId: doctorProfile.id,
+          clinicId: dto.clinicId,
+        },
+      });
+
+    if (!doctorClinic) {
+      throw new BadRequestException(
+        'Doctor is not assigned to this clinic.',
+      );
     }
 
     const slots = dto.slots ?? [];
@@ -68,6 +84,12 @@ export class DoctorSchedulesService {
     );
 
     await this.ensureNoCrossClinicConflicts(
+      doctorProfile.id,
+      dto.dayOfWeek,
+      dto.clinicId,
+      slots,
+    );
+    await this.ensureNoClinicScheduleOverlap(
       doctorProfile.id,
       dto.dayOfWeek,
       dto.clinicId,
@@ -190,12 +212,25 @@ export class DoctorSchedulesService {
         },
       });
 
+
       if (pendingRequests.length === 0) {
         throw new BadRequestException('No pending schedule requests found to approve');
       }
 
-      newSchedulesSnapshot = pendingRequests;
 
+      newSchedulesSnapshot = pendingRequests;
+      const slots: DoctorScheduleSlotDto[] = pendingRequests.map((request) => ({
+        startTime: request.startTime,
+        endTime: request.endTime,
+        type: request.type,
+        notes: request.notes ?? undefined,
+      }));
+      await this.ensureNoClinicScheduleOverlap(
+        request.doctorProfileId,
+        request.dayOfWeek,
+        request.clinicId,
+        slots,
+      );
       await scheduleRepository.delete({
         doctorProfileId: request.doctorProfileId,
         clinicId: request.clinicId,
@@ -298,7 +333,7 @@ export class DoctorSchedulesService {
     doctorProfileId: number,
     clinicId: number,
   ): Promise<DoctorSchedule[]> {
-    return this.doctorScheduleRepository.find({
+    const schedules = await this.doctorScheduleRepository.find({
       where: {
         doctorProfileId,
         clinicId,
@@ -306,6 +341,11 @@ export class DoctorSchedulesService {
       },
       order: { dayOfWeek: 'ASC', startTime: 'ASC' },
     });
+    return schedules.filter(
+      schedule =>
+        schedule.type !== DoctorScheduleType.OPERATION &&
+        schedule.type !== DoctorScheduleType.BREAK,
+    );
   }
 
   async getClinicSchedule(clinicId: number): Promise<DoctorSchedule[]> {
@@ -342,7 +382,7 @@ export class DoctorSchedulesService {
     }
   }
 
- private async ensureNoAppointmentConflicts(
+  private async ensureNoAppointmentConflicts(
     doctorProfileId: number,
     dayOfWeek: number,
     isActive: boolean,
@@ -429,17 +469,70 @@ export class DoctorSchedulesService {
       );
     }
   }
+  private async ensureNoClinicScheduleOverlap(
+    doctorProfileId: number,
+    dayOfWeek: number,
+    clinicId: number,
+    slots: DoctorScheduleSlotDto[],
+  ): Promise<void> {
+    if (slots.length === 0) {
+      return;
+    }
+
+    const otherDoctorSchedules =
+      await this.doctorScheduleRepository.find({
+        where: {
+          clinicId,
+          dayOfWeek,
+          doctorProfileId: Not(doctorProfileId),
+          isActive: true,
+        },
+      });
+
+    const hasConflict = otherDoctorSchedules.some((schedule) =>
+      slots.some((slot) =>
+        this.isOverlap(
+          slot.startTime,
+          slot.endTime,
+          schedule.startTime,
+          schedule.endTime,
+        ),
+      ),
+    );
+
+    if (hasConflict) {
+      throw new BadRequestException(
+        'Schedule overlaps with another doctor schedule in this clinic.',
+      );
+    }
+  }
 
   private isTimeRangeValid(startTime: string, endTime: string): boolean {
     return startTime < endTime;
   }
 
-  private isOverlap(
+  /*private isOverlap(
     startA: string,
     endA: string,
     startB: string,
     endB: string,
   ): boolean {
     return startA < endB && endA > startB;
+  }*/
+  private isOverlap(
+    startA: string,
+    endA: string,
+    startB: string,
+    endB: string,
+  ): boolean {
+    const toMinutes = (time: string): number => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+
+    return (
+      toMinutes(startA) < toMinutes(endB) &&
+      toMinutes(endA) > toMinutes(startB)
+    );
   }
 }

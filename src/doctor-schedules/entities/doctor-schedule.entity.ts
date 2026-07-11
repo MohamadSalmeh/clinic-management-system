@@ -9,6 +9,7 @@ export enum DoctorScheduleType {
   NORMAL = 'NORMAL',
   BREAK = 'BREAK',
   EMERGENCY = 'EMERGENCY',
+  OPERATION = 'OPERATION',
 }
 
 @Entity({ name: 'doctor_schedules' })

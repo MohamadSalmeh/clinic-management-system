@@ -10,6 +10,7 @@ import { DoctorSchedulesController } from './doctor-schedules.controller';
 import { DoctorSchedulesService } from './doctor-schedules.service';
 import { DoctorSchedule } from './entities/doctor-schedule.entity';
 import { DoctorScheduleRequest } from './entities/doctor-schedule-request.entity';
+import { DoctorClinic } from '../doctor-clinics/entities/doctor-clinic.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { DoctorScheduleRequest } from './entities/doctor-schedule-request.entity
       DoctorScheduleRequest,
       DoctorProfile,
       Appointment,
+      DoctorClinic,
     ]),
     JwtModule,
     forwardRef(() => AuthModule),

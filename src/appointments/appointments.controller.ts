@@ -26,11 +26,14 @@ import {
   // RescheduleAppointmentDto,
 } from './dto';
 import { Appointment } from './entities/appointment.entity';
+import { CreateOperationAppointmentDto } from './dto/create-operation-appointment.dto';
+import { DoctorOperationQueryDto } from './dto/doctor-operation-query.dto';
+import { DayOfWeekDto } from './dto/day-of-week.dto';
 
 @Controller('appointments')
 @UseGuards(AuthRolesGuard, VerifiedGuard)
 export class AppointmentsController {
-  constructor(private readonly appointmentsService: AppointmentsService) {}
+  constructor(private readonly appointmentsService: AppointmentsService) { }
 
   @Post()
   @Roles(UserRole.PATIENT)
@@ -159,5 +162,45 @@ export class AppointmentsController {
   @Roles(UserRole.PATIENT)
   getAvailableDays(@Body() dto: AvailableDaysDto) {
     return this.appointmentsService.getAvailableDays(dto);
+  }
+  @Post('operation')
+  @Roles(UserRole.DOCTOR)
+  createOperationAppointment(
+    @CurrentUser() currentUser: ActiveUserData,
+    @Body() dto: CreateOperationAppointmentDto,
+  ) {
+    return this.appointmentsService.createOperationAppointment(
+      currentUser.sub,
+      dto,
+    );
+  }
+  @Get('doctor/me/operation-days')
+  @Roles(UserRole.DOCTOR)
+  getOperationAvailableDays(
+    @CurrentUser() currentUser: ActiveUserData,
+    @Query('clinicId', ParseIntPipe) clinicId: number,
+  ) {
+    return this.appointmentsService.getOperationAvailableDays(
+      Number(currentUser.sub),
+      clinicId,
+    );
+  }
+  @Get('doctor/me/operations')
+  @Roles(UserRole.DOCTOR)
+  getDoctorOperations(
+    @CurrentUser() currentUser: ActiveUserData,
+    @Query() query: DoctorOperationQueryDto,
+  ) {
+    return this.appointmentsService.getDoctorOperations(
+      Number(currentUser.sub),
+      query,
+    );
+  }
+  @Post('day-of-week')
+  @Roles(UserRole.DOCTOR)
+  getDayOfWeek(
+    @Body() dto: DayOfWeekDto,
+  ) {
+    return this.appointmentsService.getDayOfWeek(dto.date);
   }
 }
