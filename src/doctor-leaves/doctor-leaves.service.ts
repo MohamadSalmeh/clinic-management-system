@@ -239,7 +239,23 @@ export class DoctorLeavesService {
     return this.isOverlap(leaveStart, leaveEnd, appointmentStart, appointmentEnd);
   }
 
-  private isOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
+  /*private isOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
     return startA < endB && endA > startB;
+  }*/
+  private isOverlap(
+    startA: string,
+    endA: string,
+    startB: string,
+    endB: string,
+  ): boolean {
+    const toMinutes = (time: string): number => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+
+    return (
+      toMinutes(startA) < toMinutes(endB) &&
+      toMinutes(endA) > toMinutes(startB)
+    );
   }
 }

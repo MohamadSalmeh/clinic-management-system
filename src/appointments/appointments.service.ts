@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
   EntityManager,
+  FindOptionsWhere,
   Raw,
   Repository,
   SelectQueryBuilder,
@@ -82,6 +83,8 @@ import {
 import { SystemSettingsService } from '../system-setting/system-settings.service';
 import { WaitlistService } from '../waitlists/waitlists.service';
 import { Waitlist } from '../waitlists/entities/waitlist.entity';
+import { CreateOperationAppointmentDto } from './dto/create-operation-appointment.dto';
+import { DoctorOperationQueryDto } from './dto/doctor-operation-query.dto';
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -1178,7 +1181,8 @@ export class AppointmentsService {
     }
 
     const workingSchedules = schedules.filter(
-      (schedule) => schedule.type !== DoctorScheduleType.BREAK,
+      (schedule) => schedule.type !== DoctorScheduleType.BREAK &&
+        schedule.type !== DoctorScheduleType.OPERATION,
     );
     if (workingSchedules.length === 0) {
       throw new BadRequestException(
@@ -1502,13 +1506,29 @@ export class AppointmentsService {
     return startTime >= rangeStart && endTime <= rangeEnd;
   }
 
-  private isOverlap(
+  /*private isOverlap(
     startA: string,
     endA: string,
     startB: string,
     endB: string,
   ): boolean {
     return startA < endB && endA > startB;
+  }*/
+  private isOverlap(
+    startA: string,
+    endA: string,
+    startB: string,
+    endB: string,
+  ): boolean {
+    const toMinutes = (time: string): number => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+
+    return (
+      toMinutes(startA) < toMinutes(endB) &&
+      toMinutes(endA) > toMinutes(startB)
+    );
   }
 
   /*private parseDate(date: string): Date {
@@ -1561,6 +1581,11 @@ export class AppointmentsService {
 
     if (!schedule) {
       throw new BadRequestException('Schedule not found');
+    }
+    if (schedule.type === DoctorScheduleType.OPERATION) {
+      throw new BadRequestException(
+        'Operation schedules cannot be booked by patients',
+      );
     }
     if (schedule.type === DoctorScheduleType.BREAK) {
       throw new BadRequestException('Break schedule cannot be used');
@@ -1869,6 +1894,7 @@ export class AppointmentsService {
       const hasSchedule = schedules.some(
         (schedule) =>
           schedule.type !== DoctorScheduleType.BREAK &&
+          schedule.type !== DoctorScheduleType.OPERATION &&
           schedule.dayOfWeek === dayOfWeek,
       );
 
@@ -1983,6 +2009,279 @@ export class AppointmentsService {
       )
     );
   }
+  async createOperationAppointment(
+    userId: number,
+    dto: CreateOperationAppointmentDto,
+  ): Promise<Appointment> {
 
+    const doctorProfile = await this.getDoctorProfileByUserId(userId);
+
+    if (Number(doctorProfile.id) !== Number(dto.doctorId)) {
+      throw new ForbiddenException(
+        'You can only create operations for yourself',
+      );
+    }
+
+    const patient = await this.patientProfileRepository.findOne({
+      where: {
+        id: dto.patientId,
+      },
+    });
+
+    if (!patient) {
+      throw new NotFoundException('Patient not found');
+    }
+
+    await this.getClinicById(dto.clinicId);
+
+    await this.ensureDoctorClinicAssignment(
+      doctorProfile.id,
+      dto.clinicId,
+    );
+
+    await this.ensureOperationSlotIsValid(
+      doctorProfile.id,
+      dto.clinicId,
+      dto.requestedDate,
+      dto.startTime,
+      dto.endTime,
+    );
+
+    await this.ensureNoConfirmedAppointmentOverlap(
+      this.appointmentRepository,
+      doctorProfile.id,
+      dto.requestedDate,
+      dto.startTime,
+      dto.endTime,
+    );
+
+    const appointment = this.appointmentRepository.create({
+      patientId: patient.id,
+      doctorId: doctorProfile.id,
+      clinicId: dto.clinicId,
+
+      requestedDate: this.parseDate(dto.requestedDate),
+
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+
+      type: 'Operation',
+
+      priority: '1',
+
+      status: 'confirmed',
+
+      reasonForVisit: null,
+      symptoms: null,
+      cancellationReason: null,
+      cancelledAt: null,
+      actualStartTime: null,
+      actualEndTime: null,
+      checkinTime: null,
+
+      notes: dto.notes ?? null,
+
+      referralId: null,
+    });
+
+    return this.appointmentRepository.save(appointment);
+  }
+  private async ensureOperationSlotIsValid(
+    doctorId: number,
+    clinicId: number,
+    requestedDate: string,
+    startTime: string,
+    endTime: string,
+  ): Promise<void> {
+
+    this.validateTimeRange(startTime, endTime);
+
+    const dayOfWeek = getDayOfWeek(requestedDate);
+
+    const operationSchedules =
+      await this.doctorScheduleRepository.find({
+        where: {
+          doctorProfileId: doctorId,
+          clinicId,
+          dayOfWeek,
+          isActive: true,
+          type: DoctorScheduleType.OPERATION,
+        },
+      });
+
+    if (operationSchedules.length === 0) {
+      throw new BadRequestException(
+        'Doctor has no operation schedule on this day',
+      );
+    }
+
+    const insideSchedule = operationSchedules.some(schedule =>
+      this.isTimeInsideRange(
+        startTime,
+        endTime,
+        schedule.startTime,
+        schedule.endTime,
+      ),
+    );
+
+    if (!insideSchedule) {
+      throw new BadRequestException(
+        'Operation time is outside operation schedule',
+      );
+    }
+
+    const leaves = await this.doctorLeaveRepository.find({
+      where: {
+        doctorProfileId: doctorId,
+        exceptionDate: Raw(alias => `DATE(${alias}) = :date`, {
+          date: requestedDate,
+        }),
+      },
+    });
+
+    const fullDayLeave = leaves.some(
+      leave => !leave.startTime && !leave.endTime,
+    );
+
+    if (fullDayLeave) {
+      throw new BadRequestException(
+        'Doctor is on leave',
+      );
+    }
+
+    const overlapsLeave = leaves.some(leave => {
+      if (!leave.startTime || !leave.endTime) {
+        return false;
+      }
+
+      return this.isOverlap(
+        startTime,
+        endTime,
+        leave.startTime,
+        leave.endTime,
+      );
+    });
+
+    if (overlapsLeave) {
+      throw new BadRequestException(
+        'Operation overlaps doctor leave',
+      );
+    }
+  }
+  async getOperationAvailableDays(
+    userId: number,
+    clinicId: number,
+  ) {
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: { userId },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    const schedules = await this.doctorScheduleRepository.find({
+      where: {
+        doctorProfileId: doctorProfile.id,
+        clinicId,
+        isActive: true,
+        type: DoctorScheduleType.OPERATION,
+      },
+    });
+
+    if (schedules.length === 0) {
+      return [];
+    }
+
+    const leaves = await this.doctorLeaveRepository.find({
+      where: {
+        doctorProfileId: doctorProfile.id,
+      },
+    });
+
+    const result: {
+      date: string;
+      dayOfWeek: number;
+    }[] = [];
+
+    const today = nowDate();
+    today.setHours(12, 0, 0, 0);
+
+    const end = addYears(today, 1);
+
+    while (today <= end) {
+      const dayOfWeek = today.getDay();
+
+      const hasSchedule = schedules.some(
+        schedule => schedule.dayOfWeek === dayOfWeek,
+      );
+
+      if (hasSchedule) {
+        const dateString = toDateString(today);
+
+        const hasFullDayLeave = leaves.some(leave => {
+          const leaveDate = toDateOnly(leave.exceptionDate);
+
+          return (
+            toDateString(leaveDate) === dateString &&
+            leave.startTime === null &&
+            leave.endTime === null
+          );
+        });
+
+        if (!hasFullDayLeave) {
+          result.push({
+            date: dateString,
+            dayOfWeek,
+          });
+        }
+      }
+
+      today.setDate(today.getDate() + 1);
+    }
+
+    return result;
+  }
+  async getDoctorOperations(
+    userId: number,
+    query: DoctorOperationQueryDto,
+  ): Promise<Appointment[]> {
+
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: { userId },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    const where: FindOptionsWhere<Appointment> = {
+      doctorId: doctorProfile.id,
+      type: 'Operation',
+    };
+
+    if (query.date) {
+      where.requestedDate = toDateOnly(query.date);
+    }
+
+    return this.appointmentRepository.find({
+      where,
+      relations: {
+        patient: {
+          user: true,
+        },
+        clinic: true,
+      },
+      order: {
+        requestedDate: 'ASC',
+        startTime: 'ASC',
+      },
+    });
+  }
+  getDayOfWeek(date: string) {
+    return {
+      dayOfWeek: getDayOfWeek(date),
+    };
+  }
   //
 }
