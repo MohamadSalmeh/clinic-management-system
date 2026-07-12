@@ -1,12 +1,12 @@
 export interface QueueConsultationCompletedEventPayload {
   userId: number;
   appointmentId: number;
-  queueId: number;
+  queueId: number | null;
   clinicName: string | null;
 }
 
 export class QueueConsultationCompletedEvent {
   static readonly eventName = 'queue.consultation_completed';
 
-  constructor(public readonly payload: QueueConsultationCompletedEventPayload) {}
+  constructor(public readonly payload: QueueConsultationCompletedEventPayload) { }
 }

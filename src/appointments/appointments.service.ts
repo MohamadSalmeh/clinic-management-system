@@ -85,6 +85,8 @@ import { WaitlistService } from '../waitlists/waitlists.service';
 import { Waitlist } from '../waitlists/entities/waitlist.entity';
 import { CreateOperationAppointmentDto } from './dto/create-operation-appointment.dto';
 import { DoctorOperationQueryDto } from './dto/doctor-operation-query.dto';
+import { OperationCreatedEvent } from '../notifications/events';
+
 
 export type AppointmentGroupedResponse = {
   upcoming: Appointment[];
@@ -410,7 +412,9 @@ export class AppointmentsService {
       .where('appointment.patientId = :patientId', {
         patientId: patientProfile.id,
       })
-      .andWhere('appointment.status = :status', { status: 'confirmed' })
+      .andWhere('appointment.status IN (:...statuses)', {
+        statuses: ['confirmed', 'in_progress'],
+      })
       .andWhere(
         '(appointment.requestedDate > :today OR (appointment.requestedDate = :today AND appointment.startTime > :currentTime))',
         {
@@ -465,7 +469,9 @@ export class AppointmentsService {
 
     return this.buildAppointmentBaseQuery()
       .where('appointment.doctorId = :doctorId', { doctorId: doctorProfile.id })
-      .andWhere('appointment.status = :status', { status: 'confirmed' })
+      .andWhere('appointment.status IN (:...statuses)', {
+        statuses: ['confirmed', 'in_progress'],
+      })
       .andWhere(
         '(appointment.requestedDate > :today OR (appointment.requestedDate = :today AND appointment.startTime > :currentTime))',
         {
@@ -1281,7 +1287,11 @@ export class AppointmentsService {
         requestedDate,
       })
       .andWhere('appointment.status IN (:...statuses)', {
-        statuses: ['pending', 'confirmed'],
+        statuses: [
+          'pending',
+          'confirmed',
+          'in_progress',
+        ]
       });
 
     if (excludeAppointmentId !== undefined) {
@@ -1472,6 +1482,7 @@ export class AppointmentsService {
     for (const appointment of appointments) {
       switch (appointment.status) {
         case 'confirmed':
+        case 'in_progress':
           grouped.upcoming.push(appointment);
           break;
         case 'completed':
@@ -2069,7 +2080,7 @@ export class AppointmentsService {
 
       priority: '1',
 
-      status: 'confirmed',
+      status: 'pending',
 
       reasonForVisit: null,
       symptoms: null,
@@ -2080,11 +2091,29 @@ export class AppointmentsService {
       checkinTime: null,
 
       notes: dto.notes ?? null,
-
+      operationCost: dto.operationCost.toFixed(2),
       referralId: null,
     });
 
-    return this.appointmentRepository.save(appointment);
+    //return this.appointmentRepository.save(appointment);
+    const result = await this.appointmentRepository.save(appointment);
+
+    const clinic = await this.getClinicById(dto.clinicId);
+
+    await this.eventEmitter.emitAsync(
+      OperationCreatedEvent.eventName,
+      new OperationCreatedEvent({
+        userId: patient.userId,
+        appointmentId: result.id,
+        requestedDate: toDateString(result.requestedDate),
+        startTime: result.startTime,
+        endTime: result.endTime,
+        doctorName: null,
+        clinicName: clinic.name,
+      }),
+    );
+
+    return result;
   }
   private async ensureOperationSlotIsValid(
     doctorId: number,
@@ -2282,6 +2311,167 @@ export class AppointmentsService {
     return {
       dayOfWeek: getDayOfWeek(date),
     };
+  }
+  async completeOperation(
+    id: number,
+    currentUser: ActiveUserData,
+  ): Promise<Appointment> {
+
+    const appointment = await this.getAppointmentWithRelations(id);
+
+    this.ensureDoctorOwnership(
+      appointment,
+      currentUser,
+    );
+    if (
+      !isSameDay(
+        appointment.requestedDate,
+        nowDate(),
+      )
+    ) {
+      throw new BadRequestException(
+        'Operation can only be completed on its scheduled date.',
+      );
+    }
+
+    if (appointment.type !== 'Operation') {
+      throw new BadRequestException(
+        'This appointment is not an operation.',
+      );
+    }
+
+    if (appointment.status !== 'in_progress') {
+      throw new BadRequestException(
+        'Only operations in progress can be completed.',
+      );
+    }
+    if (!appointment.actualStartTime) {
+      throw new BadRequestException(
+        'Operation has not been started.',
+      );
+    }
+
+    const result = await this.dataSource.transaction(async (manager) => {
+
+      const walletRepository =
+        manager.getRepository(Wallet);
+
+      const paymentRepository =
+        manager.getRepository(Payment);
+
+      const appointmentRepository =
+        manager.getRepository(Appointment);
+
+      const payment = await paymentRepository.findOne({
+        where: {
+          appointmentId: appointment.id,
+        },
+      });
+
+      if (!payment) {
+        throw new BadRequestException(
+          'Operation has not been paid yet.',
+        );
+      }
+
+      if (payment.status !== PaymentStatus.HELD) {
+        throw new BadRequestException(
+          'Operation payment has already been completed.',
+        );
+      }
+
+      const wallet = await walletRepository.findOne({
+        where: {
+          id: payment.walletId!,
+        },
+      });
+
+      if (!wallet) {
+        throw new NotFoundException(
+          'Wallet not found.',
+        );
+      }
+
+      wallet.frozenBalance = (
+        Number(wallet.frozenBalance) -
+        Number(payment.amount)
+      ).toFixed(2);
+
+      await walletRepository.save(wallet);
+
+      payment.status = PaymentStatus.COMPLETED;
+
+      await paymentRepository.save(payment);
+
+      appointment.status = 'completed';
+
+      appointment.actualEndTime = nowDate();
+
+      return await appointmentRepository.save(
+        appointment,
+      );
+    });
+
+    return result;
+  }
+  async startOperation(
+    id: number,
+    currentUser: ActiveUserData,
+  ): Promise<Appointment> {
+
+    const appointment = await this.getAppointmentWithRelations(id);
+
+    this.ensureDoctorOwnership(
+      appointment,
+      currentUser,
+    );
+    if (
+      !isSameDay(
+        appointment.requestedDate,
+        nowDate(),
+      )
+    ) {
+      throw new BadRequestException(
+        'Operation can only be started on its scheduled date.',
+      );
+    }
+
+    if (appointment.type !== 'Operation') {
+      throw new BadRequestException(
+        'This appointment is not an operation.',
+      );
+    }
+
+    if (appointment.status !== 'confirmed') {
+      throw new BadRequestException(
+        'Only confirmed operations can be started.',
+      );
+    }
+    if (appointment.actualStartTime) {
+      throw new BadRequestException(
+        'Operation has already started.',
+      );
+    }
+
+    if (!appointment.payment) {
+      throw new BadRequestException(
+        'Operation has not been paid yet.',
+      );
+    }
+
+    if (appointment.payment.status !== PaymentStatus.HELD) {
+      throw new BadRequestException(
+        'Operation payment is not held.',
+      );
+    }
+
+    appointment.status = 'in_progress';
+
+    appointment.actualStartTime = nowDate();
+
+    return this.appointmentRepository.save(
+      appointment,
+    );
   }
   //
 }

@@ -31,6 +31,7 @@ import {
   ReferralExpiringEvent,
   WalletTopUpEvent,
   WalletTransactionEvent,
+  OperationCreatedEvent,
 } from '../events';
 
 @Injectable()
@@ -38,7 +39,7 @@ export class NotificationEventListener {
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-  ) {}
+  ) { }
 
   @OnEvent(AppointmentCancelledEvent.eventName)
   async handleAppointmentCancelled(
@@ -57,6 +58,7 @@ export class NotificationEventListener {
 
   @OnEvent(AppointmentBookedEvent.eventName)
   async handleAppointmentBooked(event: AppointmentBookedEvent): Promise<void> {
+
     await this.saveNotification({
       userId: event.payload.userId,
       messageKey: AppointmentBookedEvent.eventName,
@@ -367,6 +369,24 @@ export class NotificationEventListener {
       priority: NotificationPriority.MEDIUM,
     });
   }
+  //
+  @OnEvent(OperationCreatedEvent.eventName)
+  async handleOperationCreated(
+    event: OperationCreatedEvent,
+  ): Promise<void> {
+    await this.saveNotification({
+      userId: event.payload.userId,
+      messageKey: OperationCreatedEvent.eventName,
+      arguments: event.payload as unknown as Record<string, unknown>,
+      type: NotificationType.APPOINTMENT,
+      targetType: NotificationTargetType.APPOINTMENT,
+      targetId: event.payload.appointmentId,
+      priority: NotificationPriority.HIGH,
+    });
+  }
+
+
+  //
 
   private async saveNotification(params: {
     userId: number;

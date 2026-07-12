@@ -2,9 +2,11 @@ import { Type } from 'class-transformer';
 import {
     IsDateString,
     IsInt,
+    IsNumber,
     IsOptional,
     IsString,
     Matches,
+    Min,
 } from 'class-validator';
 
 export class CreateOperationAppointmentDto {
@@ -34,4 +36,9 @@ export class CreateOperationAppointmentDto {
     @IsOptional()
     @IsString()
     notes?: string;
+
+    @Type(() => Number)
+    @IsNumber()
+    @Min(0.01)
+    operationCost!: number;
 }

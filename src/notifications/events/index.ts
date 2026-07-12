@@ -21,3 +21,4 @@ export * from './referral-consumed.event';
 export * from './patient-suspended.event';
 export * from './wallet-top-up.event';
 export * from './wallet-transaction.event';
+export * from './operation-created.event';

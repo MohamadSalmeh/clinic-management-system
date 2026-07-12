@@ -102,5 +102,9 @@
   "doctor.schedule.rejected": {
     "title": "تم رفض الجدول",
     "body": "تم رفض طلب تعديل الجدول الطبي."
+  },
+  "operation.created": {
+    "title": "تم جدولة عملية",
+    "body": "تم جدولة عملية لك بتاريخ {requestedDate} من {startTime} إلى {endTime}. يرجى إتمام عملية الدفع قبل موعد العملية."
   }
 }

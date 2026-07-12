@@ -203,4 +203,27 @@ export class AppointmentsController {
   ) {
     return this.appointmentsService.getDayOfWeek(dto.date);
   }
+
+  @Patch('operation/:id/start')
+  @Roles(UserRole.DOCTOR)
+  startOperation(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: ActiveUserData,
+  ) {
+    return this.appointmentsService.startOperation(
+      id,
+      currentUser,
+    );
+  }
+  @Patch('operation/:id/complete')
+  @Roles(UserRole.DOCTOR)
+  completeOperation(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: ActiveUserData,
+  ) {
+    return this.appointmentsService.completeOperation(
+      id,
+      currentUser,
+    );
+  }
 }

@@ -12,6 +12,7 @@ import { Payment } from './entities/payment.entity';
 
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { PatientProfile } from '../patients/entities/patient-profile.entity';
 
 @Module({
 
@@ -26,6 +27,7 @@ import { PaymentsService } from './payments.service';
             Wallet,
 
             DoctorProfile,
+             PatientProfile,
 
         ]),
 

@@ -102,5 +102,9 @@
   "doctor.schedule.rejected": {
     "title": "Schedule rejected",
     "body": "Your schedule change request has been rejected."
+  },
+  "operation.created": {
+    "title": "Operation Scheduled",
+    "body": "A surgical operation has been scheduled for you on {requestedDate} from {startTime} to {endTime}. Please complete the payment before the operation date."
   }
 }
