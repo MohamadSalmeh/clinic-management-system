@@ -22,6 +22,10 @@ import { Payment } from './entities/payment.entity';
 import { PaymentMethod } from './enums/payment-method.enum';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { MyPaymentQueryDto } from './dto/payment-query.dto';
+import { PatientProfile } from '../patients/entities/patient-profile.entity';
+import { nowDate } from '../common/utils/date-utils';
+import { WalletTransactionEvent } from '../notifications/events';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class PaymentsService {
@@ -41,6 +45,11 @@ export class PaymentsService {
         private readonly doctorRepository: Repository<DoctorProfile>,
 
         private readonly dataSource: DataSource,
+
+        @InjectRepository(PatientProfile)
+        private readonly patientRepository: Repository<PatientProfile>,
+
+        private readonly eventEmitter: EventEmitter2,
 
     ) { }
     async getMyPayments(
@@ -267,5 +276,134 @@ export class PaymentsService {
          );
  
      }*/
+    async payOperation(
+        userId: number,
+        appointmentId: number,
+    ): Promise<Payment> {
 
+        const appointment = await this.appointmentRepository.findOne({
+            where: {
+                id: appointmentId,
+            },
+        });
+
+        if (!appointment) {
+            throw new NotFoundException('Appointment not found');
+        }
+
+        if (appointment.type !== 'Operation') {
+            throw new BadRequestException(
+                'This appointment is not an operation.',
+            );
+        }
+
+        const patient = await this.patientRepository.findOne({
+            where: {
+                id: appointment.patientId,
+            },
+        });
+
+        if (!patient || Number(patient.userId) !== Number(userId)) {
+            throw new BadRequestException(
+                'You can only pay for your own operation.',
+            );
+        }
+
+        const existingPayment = await this.paymentRepository.findOne({
+            where: {
+                appointmentId,
+            },
+        });
+
+        if (existingPayment) {
+            throw new BadRequestException(
+                'Operation has already been paid.',
+            );
+        }
+
+        const operationFee = Number(appointment.operationCost);
+
+        if (operationFee <= 0) {
+            throw new BadRequestException(
+                'Invalid operation cost.',
+            );
+        }
+        return this.dataSource.transaction(async (manager) => {
+
+            const walletRepository = manager.getRepository(Wallet);
+
+            const wallet = await walletRepository.findOne({
+                where: {
+                    userId,
+                },
+            });
+
+            if (!wallet) {
+                throw new NotFoundException('Wallet not found');
+            }
+
+            if (Number(wallet.availableBalance) < operationFee) {
+                throw new BadRequestException(
+                    'Insufficient wallet balance',
+                );
+            }
+
+            wallet.availableBalance = (
+                Number(wallet.availableBalance) - operationFee
+            ).toFixed(2);
+
+            wallet.frozenBalance = (
+                Number(wallet.frozenBalance) + operationFee
+            ).toFixed(2);
+
+            await walletRepository.save(wallet);
+
+            const payment = manager.getRepository(Payment).create({
+                appointmentId: appointment.id,
+
+                walletId: wallet.id,
+
+                userId,
+
+                amount: operationFee.toFixed(2),
+
+                appointmentType: appointment.type,
+
+                paymentMethod: PaymentMethod.WALLET,
+
+                status: PaymentStatus.HELD,
+
+                penaltyAmount: '0',
+
+                refundAmount: '0',
+
+                paidAt: nowDate(),
+            });
+
+            const savedPayment = await manager
+                .getRepository(Payment)
+                .save(payment);
+
+            appointment.status = 'confirmed';
+
+            await manager
+                .getRepository(Appointment)
+                .save(appointment);
+
+            await this.eventEmitter.emitAsync(
+                WalletTransactionEvent.eventName,
+                new WalletTransactionEvent({
+                    userId,
+                    appointmentId: appointment.id,
+                    action: 'FREEZE',
+                    amount: operationFee.toFixed(2),
+                    balanceAfter: wallet.availableBalance,
+                }),
+            );
+
+            return savedPayment;
+        });
+
+
+    }
 }

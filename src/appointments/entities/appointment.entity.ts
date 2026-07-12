@@ -37,7 +37,7 @@ export class Appointment extends BaseEntity {
   @Column({ type: 'enum', enum: ['1', '2'] })
   priority!: string;
 
-  @Column({ type: 'enum', enum: ['pending','confirmed', 'cancelled', 'completed', 'no_show'] })
+  @Column({ type: 'enum', enum: ['pending', 'confirmed','in_progress', 'cancelled', 'completed', 'no_show'] })
   status!: string;
 
   /*@Column({
@@ -46,7 +46,7 @@ export class Appointment extends BaseEntity {
     enum: ['paid', 'unpaid', 'partial', 'refunded'],
   })
   paymentStatus!: string;*/
-@Transform(({ value }) => toDateString(value), { toPlainOnly: true })
+  @Transform(({ value }) => toDateString(value), { toPlainOnly: true })
   @Column({ name: 'requested_date', type: 'date' })
   requestedDate!: Date;
 
@@ -55,14 +55,14 @@ export class Appointment extends BaseEntity {
 
   @Column({ name: 'end_time', type: 'time' })
   endTime!: string;
-@Transform(({ value }) => value ? toDateString(value) : null, {
-  toPlainOnly: true,
-})
+  @Transform(({ value }) => value ? toDateString(value) : null, {
+    toPlainOnly: true,
+  })
   @Column({ name: 'actual_start_time', type: 'timestamp', nullable: true })
   actualStartTime!: Date | null;
-@Transform(({ value }) => value ? toDateString(value) : null, {
-  toPlainOnly: true,
-})
+  @Transform(({ value }) => value ? toDateString(value) : null, {
+    toPlainOnly: true,
+  })
   @Column({ name: 'actual_end_time', type: 'timestamp', nullable: true })
   actualEndTime!: Date | null;
 
@@ -74,16 +74,25 @@ export class Appointment extends BaseEntity {
 
   @Column({ name: 'cancellation_reason', type: 'text', nullable: true })
   cancellationReason!: string | null;
-@Transform(({ value }) => value ? toDateString(value) : null, {
-  toPlainOnly: true,
-})
+  @Transform(({ value }) => value ? toDateString(value) : null, {
+    toPlainOnly: true,
+  })
   @Column({ name: 'cancelled_at', type: 'timestamp', nullable: true })
   cancelledAt!: Date | null;
-@Transform(({ value }) => value ? toDateString(value) : null, {
-  toPlainOnly: true,
-})
+  @Transform(({ value }) => value ? toDateString(value) : null, {
+    toPlainOnly: true,
+  })
   @Column({ name: 'checkin_time', type: 'timestamp', nullable: true })
   checkinTime!: Date | null;
+
+  @Column({
+    name: 'operation_cost',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    nullable: true,
+  })
+  operationCost!: string | null;
 
   @Column({ type: 'text', nullable: true })
   notes!: string | null;

@@ -46,6 +46,23 @@ export class PaymentsController {
             query,
         );
     }
+    @Post('pay-operation/:appointmentId')
+    @Roles(UserRole.PATIENT)
+    payOperation(
+        @CurrentUser()
+        currentUser: ActiveUserData,
+
+        @Param(
+            'appointmentId',
+            ParseIntPipe,
+        )
+        appointmentId: number,
+    ): Promise<Payment> {
+        return this.paymentsService.payOperation(
+            currentUser.sub,
+            appointmentId,
+        );
+    }
     /* @Post('pay-appointment/:appointmentId')
      @Roles(UserRole.PATIENT)
      payAppointment(

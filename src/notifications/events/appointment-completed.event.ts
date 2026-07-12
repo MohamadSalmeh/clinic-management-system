@@ -1,7 +1,7 @@
 export interface AppointmentCompletedEventPayload {
   userId: number;
   appointmentId: number;
-  queueId: number;
+  queueId: number | null;
   clinicName: string | null;
 }
 
