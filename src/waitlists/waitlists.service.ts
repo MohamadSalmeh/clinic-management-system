@@ -6,7 +6,7 @@ import { DoctorProfile } from "../doctors/entities/doctor-profile.entity";
 import { DoctorSchedule, DoctorScheduleType } from "../doctor-schedules/entities/doctor-schedule.entity";
 import { Appointment } from "../appointments/entities/appointment.entity";
 import { DoctorLeave } from "../doctor-leaves/entities/doctor-leaves.entity";
-import { Raw, Repository } from "typeorm";
+import { MoreThanOrEqual, Raw, Repository } from "typeorm";
 import { SystemSettingsService } from "../system-setting/system-settings.service";
 import { CreateWaitlistDto } from "./dto/create-waitlist.dto";
 import { addMinutesToTime, getDayOfWeek, nowDate, toDateOnly } from "../common/utils/date-utils";
@@ -411,5 +411,40 @@ export class WaitlistService {
         return {
             message: 'Left waitlist successfully',
         };
+    }
+    async getMyWaitlists(
+        userId: number,
+    ): Promise<Waitlist[]> {
+
+        const patient = await this.patientRepository.findOne({
+            where: {
+                userId,
+            },
+        });
+
+        if (!patient) {
+            throw new NotFoundException(
+                'Patient profile not found',
+            );
+        }
+
+        return this.waitlistRepository.find({
+            where: {
+                patientProfileId: patient.id,
+                requestedDate: MoreThanOrEqual(
+                    toDateOnly(nowDate()),
+                ),
+            },
+            relations: {
+                doctor: {
+                    user: true,
+                },
+                clinic: true,
+            },
+            order: {
+                requestedDate: 'ASC',
+                created_at: 'ASC',
+            },
+        });
     }
 }
