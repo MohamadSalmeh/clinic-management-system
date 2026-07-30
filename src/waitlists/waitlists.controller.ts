@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
 import { WaitlistService } from "./waitlists.service";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ActiveUserData, UserRole } from "../utils";
@@ -31,6 +31,15 @@ export class WaitlistController {
         return this.waitlistsService.leaveWaitlist(
             currentUser.sub,
             dto,
+        );
+    }
+    @Get('my')
+    @Roles(UserRole.PATIENT)
+    getMyWaitlists(
+        @CurrentUser() currentUser: ActiveUserData,
+    ) {
+        return this.waitlistsService.getMyWaitlists(
+            currentUser.sub,
         );
     }
 }
