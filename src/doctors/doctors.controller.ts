@@ -12,7 +12,7 @@ import { DoctorProfile } from './entities/doctor-profile.entity';
 
 @Controller('doctors')
 export class DoctorsController {
-  constructor(private readonly doctorsService: DoctorsService) {}
+  constructor(private readonly doctorsService: DoctorsService) { }
 
   @Get('me')
   @UseGuards(AuthRolesGuard)
@@ -23,10 +23,22 @@ export class DoctorsController {
     return this.doctorsService.findMe(Number(user.sub));
   }
 
+  @Get('me/dashboard')
+  @UseGuards(AuthRolesGuard)
+  @Roles(UserRole.DOCTOR)
+  getMyDashboard(
+    @CurrentUser() user: ActiveUserData,
+  ) {
+    return this.doctorsService.getMyDashboard(
+      Number(user.sub),
+    );
+  }
+
   @Get()
   async findAll(@Query() query: DoctorSearchQuery): Promise<DoctorProfile[]> {
     return this.doctorsService.findAll(query);
   }
+
 
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<DoctorProfile> {
@@ -42,4 +54,5 @@ export class DoctorsController {
   ): Promise<{ profile: DoctorProfile; completionStatus: DoctorProfileCompletionStatus }> {
     return this.doctorsService.updateProfile(Number(user.sub), dto);
   }
+  
 }

@@ -17,7 +17,21 @@ import { AppointmentAccessService } from '../appointment-access/appointment-acce
 import { CurrentUser } from '../common/decorators';
 import * as path from 'path';
 import { MedicalAttachmentUploadedEvent } from '../notifications/events';
-
+type AdminAttachmentItem = {
+    id: number;
+    originalName: string;
+    fileType: string;
+    fileSize: number;
+    description: string | null;
+    createdAt: Date;
+    uploader: {
+        name: string;
+        role: string;
+    };
+    medicalProfileId: number | null;
+    medicalHistoryId: number | null;
+    appointmentId: number | null;
+};
 @Injectable()
 export class MedicalAttachmentsService {
     constructor(
@@ -48,6 +62,7 @@ export class MedicalAttachmentsService {
         medicalProfileId: number | null,
         userId: number,
         file: Express.Multer.File,
+        description?: string,
     ): Promise<MedicalAttachment> {
 
         const storedPath = await this.fileStorageService.saveFile(
@@ -68,6 +83,8 @@ export class MedicalAttachmentsService {
             fileType: file.mimetype,
 
             originalName: file.originalname,
+            fileSize: file.size,
+            description: description ?? null,
         });
 
         return this.attachmentRepository.save(attachment);
@@ -76,6 +93,7 @@ export class MedicalAttachmentsService {
     async uploadProfileAttachmentByAppointment(
         appointmentId: number,
         files: Express.Multer.File[],
+        dto: CreateMedicalAttachmentDto,
         currentUser: ActiveUserData,
     ): Promise<MedicalAttachment[]> {
 
@@ -114,6 +132,7 @@ export class MedicalAttachmentsService {
                     medicalProfile.id,
                     currentUser.sub,
                     file,
+                    dto.description,
                 ),
             );
         }
@@ -171,6 +190,7 @@ export class MedicalAttachmentsService {
                     null,
                     currentUser.sub,
                     file,
+                    dto.description,
                 ),
 
             );
@@ -192,6 +212,7 @@ export class MedicalAttachmentsService {
     }
     async uploadMyProfileAttachment(
         files: Express.Multer.File[],
+        dto: CreateMedicalAttachmentDto,
         currentUser: ActiveUserData,
     ): Promise<MedicalAttachment[]> {
         const patientProfile = await this.patientRepository.findOne({
@@ -231,6 +252,7 @@ export class MedicalAttachmentsService {
                     medicalProfile.id,
                     currentUser.sub,
                     file,
+                    dto.description,
                 ),
 
             );
@@ -592,5 +614,124 @@ export class MedicalAttachmentsService {
             path.resolve(attachment.filePath),
         );
     }
+    async getPatientAttachmentsForAdmin(
+        patientId: number,
+    ): Promise<{
+        profileAttachments: AdminAttachmentItem[];
+        historyAttachments: AdminAttachmentItem[];
+    }> {
+        const patient = await this.patientRepository.findOne({
+            where: {
+                id: patientId,
+            },
+        });
+
+        if (!patient) {
+            throw new NotFoundException('Patient not found');
+        }
+
+        const medicalProfile = await this.medicalProfileRepository.findOne({
+            where: {
+                patientProfileId: patientId,
+            },
+        });
+
+        if (!medicalProfile) {
+            throw new NotFoundException('Medical profile not found');
+        }
+
+        const profileAttachments =
+            await this.attachmentRepository.find({
+                where: {
+                    medicalProfileId: medicalProfile.id,
+                    medicalHistoryId: IsNull(),
+                },
+                relations: {
+                    user: true,
+                },
+                order: {
+                    created_at: 'DESC',
+                },
+            });
+
+        const historyAttachments =
+            await this.attachmentRepository
+                .createQueryBuilder('attachment')
+                .innerJoinAndSelect(
+                    'attachment.medicalHistory',
+                    'history',
+                )
+                .innerJoinAndSelect(
+                    'attachment.user',
+                    'user',
+                )
+                .where(
+                    'history.medicalProfileId = :medicalProfileId',
+                    {
+                        medicalProfileId: medicalProfile.id,
+                    },
+                )
+                .orderBy(
+                    'attachment.created_at',
+                    'DESC',
+                )
+                .getMany();
+
+        const mapAttachment = (
+            attachment: MedicalAttachment,
+            appointmentId: number | null,
+        ): AdminAttachmentItem => ({
+            id: attachment.id,
+            originalName: attachment.originalName,
+            fileType: attachment.fileType,
+            fileSize: attachment.fileSize,
+            description: attachment.description,
+            createdAt: attachment.created_at,
+            uploader: {
+                name: attachment.user.fullName,
+                role: attachment.user.role,
+            },
+            medicalProfileId: attachment.medicalProfileId,
+            medicalHistoryId: attachment.medicalHistoryId,
+            appointmentId,
+        });
+
+        return {
+            profileAttachments: profileAttachments.map(
+                (attachment) =>
+                    mapAttachment(attachment, null),
+            ),
+
+            historyAttachments: historyAttachments.map(
+                (attachment) =>
+                    mapAttachment(
+                        attachment,
+                        attachment.medicalHistory?.appointmentId ?? null,
+                    ),
+            ),
+        };
+    }
+    async downloadAttachmentForAdmin(
+        attachmentId: number,
+        response: Response,
+    ): Promise<void> {
+        const attachment =
+            await this.attachmentRepository.findOne({
+                where: {
+                    id: attachmentId,
+                },
+            });
+
+        if (!attachment) {
+            throw new NotFoundException(
+                'Attachment not found',
+            );
+        }
+
+        return response.sendFile(
+            path.resolve(attachment.filePath),
+        );
+    }
+
 
 }

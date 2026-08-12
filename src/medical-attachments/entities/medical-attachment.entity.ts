@@ -11,7 +11,8 @@ import { MedicalHistory } from '../../medical-histories/entities/medical-history
 import { MedicalProfile } from '../../medical-profiles/entities/medical-profile.entity';
 import { User } from '../../users/entities/user.entity';
 import { BaseEntity } from '../../common/entities/base.entity';
-
+import { Appointment } from '../../appointments/entities/appointment.entity';
+import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
 @Entity({ name: 'medical_attachments' })
 @Check(`
 (
@@ -38,6 +39,19 @@ export class MedicalAttachment extends BaseEntity {
 
   @Column({ name: 'file_type', type: 'varchar', length: 100 })
   fileType!: string;
+
+  @Column({
+    name: 'file_size',
+    type: 'bigint',
+    default: 0,
+    transformer: new ColumnNumericTransformer(),
+  })
+  fileSize!: number;
+  @Column({
+    type: 'text',
+    nullable: true,
+  })
+  description!: string | null;
 
   @Column({ name: 'original_name', type: 'varchar', length: 255 })
   originalName!: string;

@@ -55,8 +55,11 @@ export class MedicalAttachmentsController {
     }
     @Post('profile/me')
     @Roles(UserRole.PATIENT)
+
     @UseInterceptors(FilesInterceptor('files', 10, multerConfig))
     uploadMyProfileAttachment(
+        @Body()
+        dto: CreateMedicalAttachmentDto,
         @UploadedFiles()
         files: Express.Multer.File[],
 
@@ -65,6 +68,7 @@ export class MedicalAttachmentsController {
     ) {
         return this.medicalAttachmentsService.uploadMyProfileAttachment(
             files,
+            dto,
             currentUser,
         );
     }
@@ -77,13 +81,15 @@ export class MedicalAttachmentsController {
 
         @UploadedFiles()
         files: Express.Multer.File[],
-
+        @Body()
+        dto: CreateMedicalAttachmentDto,
         @CurrentUser()
         currentUser: ActiveUserData,
     ) {
         return this.medicalAttachmentsService.uploadProfileAttachmentByAppointment(
             appointmentId,
             files,
+            dto,
             currentUser,
         );
     }
