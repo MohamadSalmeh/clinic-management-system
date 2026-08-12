@@ -10,10 +10,15 @@ import { User } from '../users/entities/user.entity';
 import { DoctorAdminLog } from './entities/doctor-admin-log.entity';
 import { DoctorAdminLogsService } from './doctor-admin-logs.service';
 import { DoctorAdminLogsController } from './doctor-admin-logs.controller';
+import { Appointment } from '../appointments/entities/appointment.entity';
+import { Queue } from '../queues/entities/queue.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DoctorProfile, User, DoctorAdminLog]),
+    TypeOrmModule.forFeature([DoctorProfile, User, DoctorAdminLog,
+      Appointment,
+      Queue,
+    ]),
     forwardRef(() => AuthModule),
     JwtModule,
     forwardRef(() => UsersModule),
@@ -22,4 +27,4 @@ import { DoctorAdminLogsController } from './doctor-admin-logs.controller';
   providers: [DoctorsService, DoctorAdminLogsService],
   exports: [DoctorsService, DoctorAdminLogsService, TypeOrmModule],
 })
-export class DoctorsModule {}
+export class DoctorsModule { }

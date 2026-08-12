@@ -6,7 +6,9 @@ import {
   ParseIntPipe,
   Post,
   UseGuards,
+  Res
 } from '@nestjs/common';
+import { MedicalAttachmentsService } from '../medical-attachments/medical-attachments.service';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
 import { AuthRolesGuard, VerifiedGuard } from '../auth/guards';
@@ -14,7 +16,19 @@ import { DoctorInvitationsService } from '../doctor-invitations/doctor-invitatio
 import { CreateDoctorInvitationDto } from './dto';
 import { AdminsService } from './admins.service';
 import { DoctorInvitation } from '../doctor-invitations/entities/doctor-invitation.entity';
+import {
+  Query
+} from '@nestjs/common';
+import {
+  AdminDoctorsQuery,
+  DoctorsService,
+} from '../doctors/doctors.service';
+import { PatientsService } from '../patients/patients.service';
 
+import {
+  AdminPatientsQuery
+} from '../patients/patients.service';
+import { Response } from 'express';
 @Controller('admin')
 @UseGuards(AuthRolesGuard, VerifiedGuard)
 @Roles(UserRole.ADMIN)
@@ -22,7 +36,10 @@ export class AdminsController {
   constructor(
     private readonly adminsService: AdminsService,
     private readonly doctorInvitationsService: DoctorInvitationsService,
-  ) {}
+    private readonly doctorsService: DoctorsService,
+    private readonly patientsService: PatientsService,
+    private readonly medicalAttachmentsService: MedicalAttachmentsService,
+  ) { }
 
   @Post('profile/init')
   async initAdminProfile(
@@ -72,5 +89,41 @@ export class AdminsController {
     await this.doctorInvitationsService.cancelInvitation(id);
 
     return { message: 'Invitation cancelled' };
+  }
+  @Get('doctors')
+  getDoctors(
+    @Query() query: AdminDoctorsQuery,
+  ) {
+    return this.doctorsService.findAllForAdmin(query);
+  }
+
+
+  @Get('patients')
+  getPatients(
+    @Query() query: AdminPatientsQuery,
+  ) {
+    return this.patientsService.findAllForAdmin(query);
+  }
+  @Get('patients/:patientId/attachments')
+  getPatientAttachments(
+    @Param('patientId', ParseIntPipe)
+    patientId: number,
+  ) {
+    return this.medicalAttachmentsService.getPatientAttachmentsForAdmin(
+      patientId,
+    );
+  }
+  @Get('medical-attachments/:attachmentId/download')
+  downloadAttachment(
+    @Param('attachmentId', ParseIntPipe)
+    attachmentId: number,
+
+    @Res()
+    response: Response,
+  ) {
+    return this.medicalAttachmentsService.downloadAttachmentForAdmin(
+      attachmentId,
+      response,
+    );
   }
 }

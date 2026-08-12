@@ -1,7 +1,7 @@
 // patients.service.ts
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { Appointment } from '../appointments/entities/appointment.entity';
 import { MedicalProfile } from '../medical-profiles/entities/medical-profile.entity';
 import { User } from '../users/entities/user.entity';
@@ -27,7 +27,12 @@ export type PatientWalletSummary = {
   availableBalance: string;
   frozenBalance: string;
 };
-
+export type AdminPatientsQuery = {
+  page?: string;
+  limit?: string;
+  search?: string;
+  status?: string;
+};
 const APPOINTMENT_STATUS_MAP: Record<PatientAppointmentFilter, readonly string[]> = {
   upcoming: ['confirmed'],
   completed: ['completed'],
@@ -243,5 +248,78 @@ export class PatientsService {
     }
 
     return grouped;
+  }
+  async findAllForAdmin(
+    query: AdminPatientsQuery,
+  ): Promise<{
+    data: PatientProfile[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = Math.max(
+      Number(query.page?.trim()) || 1,
+      1,
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number(query.limit?.trim()) || 10,
+        1,
+      ),
+      100,
+    );
+
+    const searchTerm = query.search?.trim();
+    const status = query.status?.trim();
+
+    const qb = this.patientProfileRepository
+      .createQueryBuilder('patient')
+      .leftJoinAndSelect('patient.user', 'user');
+
+    if (status) {
+      qb.andWhere('user.status = :status', {
+        status,
+      });
+    }
+
+    if (searchTerm) {
+      const search = `%${searchTerm}%`;
+
+      qb.andWhere(
+        new Brackets((builder) => {
+          builder
+            .where('user.firstName ILike :search', {
+              search,
+            })
+            .orWhere('user.fatherName ILike :search', {
+              search,
+            })
+            .orWhere('user.lastName ILike :search', {
+              search,
+            })
+            .orWhere('user.email ILike :search', {
+              search,
+            })
+            .orWhere('user.phone ILike :search', {
+              search,
+            });
+        }),
+      );
+    }
+
+    qb
+      .orderBy('patient.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
   }
 }

@@ -7,8 +7,18 @@ import { User } from '../users/entities/user.entity';
 import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
 import { DoctorAdminLogsService } from './doctor-admin-logs.service';
 import { DoctorAdminLogType } from './entities/doctor-admin-log.entity';
-import { toDateOnly } from '../common/utils/date-utils'; // ✅ إضافة الاستيراد
+import { toDateOnly, toDateString, todayDateString } from '../common/utils/date-utils'; // ✅ إضافة الاستيراد
+import {
+  Appointment,
+} from '../appointments/entities/appointment.entity';
 
+import {
+  Queue,
+} from '../queues/entities/queue.entity';
+
+import {
+  QueueStatus,
+} from '../queues/enums/queue-status.enum';
 export type DoctorProfileCompletionStatus = {
   isComplete: boolean;
   completionPercentage: number;
@@ -23,6 +33,14 @@ export type DoctorSearchQuery = {
   clinicId?: string;
   search?: string;
 };
+export type AdminDoctorsQuery = {
+  page?: string;
+  limit?: string;
+  search?: string;
+  status?: DoctorProfileStatus;
+  clinicId?: string;
+  specialization?: string;
+};
 
 @Injectable()
 export class DoctorsService {
@@ -34,7 +52,12 @@ export class DoctorsService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly doctorAdminLogsService: DoctorAdminLogsService,
-  ) {}
+    @InjectRepository(Appointment)
+    private readonly appointmentRepository: Repository<Appointment>,
+
+    @InjectRepository(Queue)
+    private readonly queueRepository: Repository<Queue>,
+  ) { }
 
   async updateProfile(
     userId: number,
@@ -258,5 +281,317 @@ export class DoctorsService {
 
     const parsed = Number(value);
     return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  async findAllForAdmin(
+    query: AdminDoctorsQuery,
+  ): Promise<{
+    data: DoctorProfile[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = Math.max(
+      Number(query.page?.trim()) || 1,
+      1,
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number(query.limit?.trim()) || 10,
+        1,
+      ),
+      100,
+    );
+
+    const status = query.status?.trim();
+    const specialization = query.specialization?.trim();
+    const clinicIdValue = query.clinicId?.trim();
+    const searchTerm = query.search?.trim();
+
+    const qb = this.doctorProfileRepository
+      .createQueryBuilder('doctor')
+      .leftJoinAndSelect('doctor.user', 'user');
+
+    if (status) {
+      qb.andWhere('doctor.status = :status', {
+        status,
+      });
+    }
+
+    if (specialization) {
+      qb.andWhere(
+        'doctor.specialization ILike :specialization',
+        {
+          specialization: `%${specialization}%`,
+        },
+      );
+    }
+
+    if (clinicIdValue) {
+      const clinicId = Number(clinicIdValue);
+
+      if (!Number.isNaN(clinicId)) {
+        qb.innerJoin(
+          'doctor.clinicAssignments',
+          'clinicAssignment',
+        ).andWhere(
+          'clinicAssignment.clinicId = :clinicId',
+          { clinicId },
+        );
+      }
+    }
+
+    if (searchTerm) {
+      const search = `%${searchTerm}%`;
+
+      qb.andWhere(
+        new Brackets((builder) => {
+          builder
+            .where('user.firstName ILike :search', {
+              search,
+            })
+            .orWhere('user.lastName ILike :search', {
+              search,
+            })
+            .orWhere('user.fatherName ILike :search', {
+              search,
+            })
+            .orWhere('user.email ILike :search', {
+              search,
+            })
+            .orWhere('user.phone ILike :search', {
+              search,
+            })
+            .orWhere('doctor.licenseNumber ILike :search', {
+              search,
+            })
+            .orWhere('doctor.specialization ILike :search', {
+              search,
+            });
+        }),
+      );
+    }
+
+    qb
+      .orderBy('doctor.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
+  }
+  async getMyDashboard(userId: number): Promise<{
+    doctor: {
+      id: number;
+      fullName: string;
+      specialization: string | null;
+      averageRating: number;
+      avatarUrl: string | null;
+    };
+    stats: {
+      appointmentsToday: number;
+      appointmentsThisWeek: number;
+      patientsWaiting: number;
+      completedToday: number;
+    };
+    upcomingAppointments: Array<{
+      id: number;
+      patient: {
+        id: number;
+        fullName: string;
+      };
+      date: string;
+      startTime: string;
+      endTime: string;
+      type: string;
+      status: string;
+    }>;
+  }> {
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: {
+        userId,
+      },
+      relations: {
+        user: true,
+      },
+    });
+
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const dayOfWeek = today.getDay();
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - dayOfWeek);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    const todayString = todayDateString();
+    const weekStartString = toDateString(weekStart);
+    const weekEndString = toDateString(weekEnd);
+
+    const appointmentsToday = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctorId = :doctorId', {
+        doctorId: doctorProfile.id,
+      })
+      .andWhere('appointment.requestedDate = :today', {
+        today: todayString,
+      })
+      .andWhere('appointment.status != :cancelled', {
+        cancelled: 'cancelled',
+      })
+      .getCount();
+
+    const appointmentsThisWeek = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctorId = :doctorId', {
+        doctorId: doctorProfile.id,
+      })
+      .andWhere('appointment.requestedDate >= :weekStart', {
+        weekStart: weekStartString,
+      })
+      .andWhere('appointment.requestedDate < :weekEnd', {
+        weekEnd: weekEndString,
+      })
+      .andWhere('appointment.status != :cancelled', {
+        cancelled: 'cancelled',
+      })
+      .getCount();
+
+    const completedToday = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .where('appointment.doctorId = :doctorId', {
+        doctorId: doctorProfile.id,
+      })
+      .andWhere('appointment.requestedDate = :today', {
+        today: todayString,
+      })
+      .andWhere('appointment.status = :completed', {
+        completed: 'completed',
+      })
+      .getCount();
+    /*
+        const patientsWaiting = await this.queueRepository
+          .createQueryBuilder('queue')
+          .innerJoin(
+            'queue.appointment',
+            'appointment',
+          )
+          .where('queue.doctorId = :doctorId', {
+            doctorId: doctorProfile.id,
+          })
+          .andWhere('queue.status = :status', {
+            status: QueueStatus.WAITING,
+          })
+          .andWhere('appointment.requestedDate = :today', {
+            today: todayString,
+          })
+          .getCount();
+    */
+    const patientsWaiting = await this.queueRepository
+      .createQueryBuilder('queue')
+      .innerJoin(
+        'queue.appointment',
+        'appointment',
+      )
+      .where('queue.doctorId = :doctorId', {
+        doctorId: doctorProfile.id,
+      })
+      .andWhere('queue.status = :status', {
+        status: QueueStatus.WAITING,
+      })
+      .andWhere('appointment.requestedDate = :today', {
+        today: todayString,
+      })
+      .andWhere('appointment.status != :cancelled', {
+        cancelled: 'cancelled',
+      })
+      .getCount();
+    const upcoming = await this.appointmentRepository
+      .createQueryBuilder('appointment')
+      .leftJoinAndSelect(
+        'appointment.patient',
+        'patient',
+      )
+      .leftJoinAndSelect(
+        'patient.user',
+        'patientUser',
+      )
+      .where('appointment.doctorId = :doctorId', {
+        doctorId: doctorProfile.id,
+      })
+      .andWhere('appointment.status = :status', {
+        status: 'confirmed',
+      })
+      .andWhere(
+        `
+      (
+        appointment.requestedDate > :today
+        OR (
+          appointment.requestedDate = :today
+          AND appointment.startTime > :currentTime
+        )
+      )
+      `,
+        {
+          today: todayString,
+          currentTime: `${String(new Date().getHours()).padStart(2, '0')}:${String(
+            new Date().getMinutes(),
+          ).padStart(2, '0')}:00`,
+        },
+      )
+      .orderBy('appointment.requestedDate', 'ASC')
+      .addOrderBy('appointment.startTime', 'ASC')
+      .take(3)
+      .getMany();
+
+    return {
+      doctor: {
+        id: doctorProfile.id,
+        fullName: doctorProfile.user.fullName,
+        specialization: doctorProfile.specialization,
+        averageRating: Number(doctorProfile.averageRating ?? 0),
+        avatarUrl: doctorProfile.user.avatarUrl ?? null,
+      },
+
+      stats: {
+        appointmentsToday,
+        appointmentsThisWeek,
+        patientsWaiting,
+        completedToday,
+      },
+
+      upcomingAppointments: upcoming.map((appointment) => ({
+        id: appointment.id,
+
+        patient: {
+          id: appointment.patient.id,
+          fullName: appointment.patient.user.fullName,
+        },
+
+        date: toDateString(appointment.requestedDate),
+
+        startTime: appointment.startTime.slice(0, 5),
+        endTime: appointment.endTime.slice(0, 5),
+
+        type: appointment.type,
+        status: appointment.status,
+      })),
+    };
   }
 }

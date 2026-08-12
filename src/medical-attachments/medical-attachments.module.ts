@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MedicalAttachment } from './entities/medical-attachment.entity';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
@@ -12,6 +12,7 @@ import { FileStorageService } from '../file-storage/file-storage.service';
 import { AppointmentAccessModule } from '../appointment-access/appointment-access.module';
 import { AuthModule } from '../auth';
 
+
 @Module({
 	imports: [
 		TypeOrmModule.forFeature([
@@ -23,7 +24,7 @@ import { AuthModule } from '../auth';
 			PatientProfile,
 		]),
 		AppointmentAccessModule,
-		AuthModule,
+		forwardRef(() => AuthModule),
 	],
 
 	controllers: [MedicalAttachmentsController],
