@@ -141,11 +141,6 @@ export class AdminsController {
   }
 
   // ========== PHASE 2: Admin Management Endpoints ==========
-
-  /**
-   * GET /admin/patients/:id/medical-details
-   * Returns comprehensive patient medical details including profile, user, medical profile, history, and appointments
-   */
   @Get('patients/:id/medical-details')
   @HttpCode(HttpStatus.OK)
   public async getPatientMedicalDetails(
@@ -154,10 +149,6 @@ export class AdminsController {
     return this.adminPatientsService.getPatientMedicalDetails(id);
   }
 
-  /**
-   * GET /admin/ratings/:id
-   * Returns full rating details with patient, doctor, and appointment information
-   */
   @Get('ratings/:id')
   @HttpCode(HttpStatus.OK)
   public async getRatingDetails(
@@ -166,10 +157,6 @@ export class AdminsController {
     return this.adminRatingsService.getRatingDetails(id);
   }
 
-  /**
-   * GET /admin/reports/:id
-   * Returns full rating report details with reporter and rating information
-   */
   @Get('reports/:id')
   @HttpCode(HttpStatus.OK)
   public async getReportDetails(
@@ -178,10 +165,6 @@ export class AdminsController {
     return this.adminReportsService.getReportDetails(id);
   }
 
-  /**
-   * PATCH /admin/doctors/:id/status
-   * Deactivates a doctor without deleting any historical data
-   */
   @Patch('doctors/:id/status')
   @HttpCode(HttpStatus.OK)
   public async deactivateDoctor(
@@ -189,5 +172,48 @@ export class AdminsController {
     @Body() dto: UpdateDoctorStatusDto,
   ) {
     return this.adminDoctorsService.deactivateDoctor(id);
+  }
+
+  // ========== PHASE 3: Admin Patient Management Endpoints ==========
+  // ✅ الـ Controller معرف بـ @Controller('admin')، لذلك المسار يبدأ بـ 'patients/...'
+
+  @Get('patients/:patientId')
+  @HttpCode(HttpStatus.OK)
+  public async getPatientBasicProfile(
+    @Param('patientId', ParseIntPipe) patientId: number,
+  ) {
+    return this.adminPatientsService.getPatientBasicProfile(patientId);
+  }
+
+  @Get('patients/:patientId/appointments')
+  @HttpCode(HttpStatus.OK)
+  public async getPatientAppointments(
+    @Param('patientId', ParseIntPipe) patientId: number,
+  ) {
+    return this.adminPatientsService.getPatientAppointments(patientId);
+  }
+
+  @Get('patients/:patientId/medical-profile')
+  @HttpCode(HttpStatus.OK)
+  public async getPatientMedicalProfile(
+    @Param('patientId', ParseIntPipe) patientId: number,
+  ) {
+    return this.adminPatientsService.getPatientMedicalProfile(patientId);
+  }
+
+  @Get('patients/:patientId/medical-histories')
+  @HttpCode(HttpStatus.OK)
+  public async getPatientMedicalHistories(
+    @Param('patientId', ParseIntPipe) patientId: number,
+  ) {
+    return this.adminPatientsService.getPatientMedicalHistories(patientId);
+  }
+
+  @Get('patients/:patientId/medical-profile-logs')
+  @HttpCode(HttpStatus.OK)
+  public async getPatientMedicalProfileLogs(
+    @Param('patientId', ParseIntPipe) patientId: number,
+  ) {
+    return this.adminPatientsService.getPatientMedicalProfileLogs(patientId);
   }
 }

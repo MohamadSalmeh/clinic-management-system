@@ -1,4 +1,3 @@
-// filepath: src/admins/admins.module.ts
 import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminProfile } from './entities/admin-profile.entity';
@@ -26,10 +25,10 @@ import { Rating } from '../ratings/entities/rating.entity';
 import { MedicalProfile } from '../medical-profiles/entities/medical-profile.entity';
 import { MedicalHistory } from '../medical-histories/entities/medical-history.entity';
 import { RatingReport } from '../ratings/entities/rating-report.entity';
+import { MedicalProfileLog } from '../medical-profile-logs/entities/medical-profile-log.entity'; // ✅ أضف هذا
 
 @Module({
   imports: [
-    // All TypeORM entities used across the module
     TypeOrmModule.forFeature([
       AdminProfile,
       User,
@@ -44,8 +43,8 @@ import { RatingReport } from '../ratings/entities/rating-report.entity';
       MedicalProfile,
       MedicalHistory,
       RatingReport,
+      MedicalProfileLog, // ✅ أضف هذا
     ]),
-    // External modules
     DoctorInvitationsModule,
     DoctorsModule,
     PatientsModule,
@@ -69,6 +68,7 @@ import { RatingReport } from '../ratings/entities/rating-report.entity';
     AdminRatingsService,
     AdminReportsService,
     AdminDoctorsService,
+    
   ],
 })
 export class AdminsModule {}
