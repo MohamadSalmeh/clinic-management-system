@@ -104,6 +104,19 @@ export class AppointmentsController {
   }> {
     return this.appointmentsService.getAdminAppointments(query);
   }
+    @Get('day-status')
+@Roles(UserRole.PATIENT)
+getAppointmentDayStatus(
+  @Query('doctorId', ParseIntPipe) doctorId: number,
+  @Query('clinicId', ParseIntPipe) clinicId: number,
+  @Query('requestedDate') requestedDate: string,
+) {
+  return this.appointmentsService.getAppointmentDayStatus(
+    doctorId,
+    clinicId,
+    requestedDate,
+  );
+}
 
   @Get(':id')
   @Roles(UserRole.PATIENT, UserRole.DOCTOR, UserRole.ADMIN)
@@ -240,4 +253,5 @@ export class AppointmentsController {
       currentUser,
     );
   }
+
 }

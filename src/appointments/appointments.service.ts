@@ -2614,6 +2614,192 @@ export class AppointmentsService {
     return this.appointmentRepository.save(
       appointment,
     );
+  } 
+  async getAppointmentDayStatus(
+  doctorId: number,
+  clinicId: number,
+  requestedDate: string,
+): Promise<{ status: 'available' | 'full' }> {
+  const schedules = await this.doctorScheduleRepository.find({
+    where: {
+      doctorProfileId: doctorId,
+      clinicId,
+      isActive: true,
+    },
+  });
+
+  const normalSchedules = schedules.filter(
+    (schedule) =>
+      schedule.type !== DoctorScheduleType.BREAK &&
+      schedule.type !== DoctorScheduleType.OPERATION,
+  );
+
+  if (normalSchedules.length === 0) {
+    return {
+      status: 'full',
+    };
   }
+
+  const breakSchedules = await this.doctorScheduleRepository.find({
+    where: {
+      doctorProfileId: doctorId,
+      clinicId,
+      type: DoctorScheduleType.BREAK,
+      isActive: true,
+    },
+  });
+
+  const dayOfWeek = getDayOfWeek(requestedDate);
+
+  const schedulesForDay = normalSchedules.filter(
+    (schedule) => schedule.dayOfWeek === dayOfWeek,
+  );
+
+  if (schedulesForDay.length === 0) {
+    return {
+      status: 'full',
+    };
+  }
+
+  const leaves = await this.doctorLeaveRepository.find({
+    where: {
+      doctorProfileId: doctorId,
+      exceptionDate: Raw((alias) => `DATE(${alias}) = :date`, {
+        date: requestedDate,
+      }),
+    },
+  });
+
+  const hasFullDayLeave = leaves.some(
+    (leave) => !leave.startTime && !leave.endTime,
+  );
+
+  if (hasFullDayLeave) {
+    return {
+      status: 'full',
+    };
+  }
+
+  const settings = await this.systemSettingsService.getSettings();
+
+  const duration = Math.min(
+    settings.initialVisitDuration,
+    settings.returnVisitDuration,
+  );
+
+  const appointments = await this.appointmentRepository
+    .createQueryBuilder('appointment')
+    .where('appointment.doctorId = :doctorId', {
+      doctorId,
+    })
+    .andWhere('DATE(appointment.requestedDate) = :date', {
+      date: requestedDate,
+    })
+    .andWhere('appointment.status IN (:...status)', {
+      status: ['pending', 'confirmed'],
+    })
+    .orderBy('appointment.startTime', 'ASC')
+    .getMany();
+
+  type BlockedInterval = {
+    start: string;
+    end: string;
+  };
+
+  for (const schedule of schedulesForDay) {
+    const scheduleBreaks = breakSchedules.filter(
+      (breakSchedule) =>
+        breakSchedule.dayOfWeek === schedule.dayOfWeek,
+    );
+
+    const blockedIntervals: BlockedInterval[] = [];
+
+    // Appointments
+    for (const appointment of appointments) {
+      if (
+        appointment.startTime >= schedule.startTime &&
+        appointment.endTime <= schedule.endTime
+      ) {
+        blockedIntervals.push({
+          start: appointment.startTime,
+          end: appointment.endTime,
+        });
+      }
+    }
+
+    // Breaks
+    for (const breakSchedule of scheduleBreaks) {
+      if (
+        breakSchedule.startTime >= schedule.startTime &&
+        breakSchedule.endTime <= schedule.endTime
+      ) {
+        blockedIntervals.push({
+          start: breakSchedule.startTime,
+          end: breakSchedule.endTime,
+        });
+      }
+    }
+
+    // Partial Leaves
+    for (const leave of leaves) {
+      if (leave.startTime && leave.endTime) {
+        if (
+          leave.startTime >= schedule.startTime &&
+          leave.endTime <= schedule.endTime
+        ) {
+          blockedIntervals.push({
+            start: leave.startTime,
+            end: leave.endTime,
+          });
+        }
+      }
+    }
+
+    // Sort
+    blockedIntervals.sort((a, b) =>
+      a.start.localeCompare(b.start),
+    );
+
+    let start = schedule.startTime;
+
+    for (const interval of blockedIntervals) {
+      const candidateEnd = addMinutesToTime(
+        start,
+        duration,
+      );
+
+      // وجدنا فراغاً كافياً
+      if (candidateEnd <= interval.start) {
+        return {
+          status: 'available',
+        };
+      }
+
+      if (
+        this.isOverlap(
+          start,
+          candidateEnd,
+          interval.start,
+          interval.end,
+        )
+      ) {
+        start = interval.end;
+      }
+    }
+
+    const end = addMinutesToTime(start, duration);
+
+    if (end <= schedule.endTime) {
+      return {
+        status: 'available',
+      };
+    }
+  }
+
+  return {
+    status: 'full',
+  };
+}
+  
   //
 }
