@@ -25,6 +25,15 @@ import {
   WaitListDto,
   // RescheduleAppointmentDto,
 } from './dto';
+import {
+  Brackets,
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Raw,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
 import { CreateOperationAppointmentDto } from './dto/create-operation-appointment.dto';
 import { DoctorOperationQueryDto } from './dto/doctor-operation-query.dto';
@@ -87,7 +96,12 @@ export class AppointmentsController {
   @Roles(UserRole.ADMIN)
   getAdminAppointments(
     @Query() query: AdminAppointmentQueryDto,
-  ): Promise<Appointment[]> {
+  ): Promise<{
+    data: Appointment[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     return this.appointmentsService.getAdminAppointments(query);
   }
 

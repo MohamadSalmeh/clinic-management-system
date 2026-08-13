@@ -47,12 +47,53 @@ export class AdminAppointmentQueryDto {
     clinicId?: number;
 
     @IsOptional()
-    @IsIn(['confirmed', 'completed', 'cancelled', 'no_show'])
-    status?: 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+    @IsIn([
+        'pending',
+        'confirmed',
+        'in_progress',
+        'cancelled',
+        'completed',
+        'no_show',
+    ])
+    status?:
+        | 'pending'
+        | 'confirmed'
+        | 'in_progress'
+        | 'cancelled'
+        | 'completed'
+        | 'no_show';
 
     @IsOptional()
-    @IsIn(['paid', 'unpaid', 'partial', 'refunded'])
-    paymentStatus?: 'paid' | 'unpaid' | 'partial' | 'refunded';
+    @IsIn([
+        'pending',
+        'held',
+        'completed',
+        'refunded',
+        'partial_refunded',
+        'forfeited',
+        'failed',
+    ])
+    paymentStatus?:
+        | 'pending'
+        | 'held'
+        | 'completed'
+        | 'refunded'
+        | 'partial_refunded'
+        | 'forfeited'
+        | 'failed';
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    page?: number;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    limit?: number;
+
+    @IsOptional()
+    search?: string;
 
     @IsOptional()
     @IsDateString()

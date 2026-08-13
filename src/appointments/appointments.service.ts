@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  Brackets,
   DataSource,
   EntityManager,
   FindOptionsWhere,
@@ -484,10 +485,36 @@ export class AppointmentsService {
       .getMany();
   }
 
+
   async getAdminAppointments(
     query: AdminAppointmentQueryDto,
-  ): Promise<Appointment[]> {
+  ): Promise<{
+    data: Appointment[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = Math.max(
+      Number(query.page) || 1,
+      1,
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number(query.limit) || 10,
+        1,
+      ),
+      100,
+    );
+
+    const searchTerm = query.search?.trim();
+
     const qb = this.buildAppointmentBaseQuery();
+
+    qb.leftJoinAndSelect(
+      'appointment.payment',
+      'payment',
+    );
 
     if (query.doctorId !== undefined) {
       qb.andWhere('appointment.doctorId = :doctorId', {
@@ -508,27 +535,142 @@ export class AppointmentsService {
     }
 
     if (query.status) {
-      qb.andWhere('appointment.status = :status', { status: query.status });
+      qb.andWhere('appointment.status = :status', {
+        status: query.status,
+      });
     }
 
     if (query.paymentStatus) {
-      qb.andWhere('appointment.paymentStatus = :paymentStatus', {
+      qb.andWhere('payment.status = :paymentStatus', {
         paymentStatus: query.paymentStatus,
       });
     }
 
     if (query.from) {
-      qb.andWhere('appointment.requestedDate >= :from', { from: query.from });
+      qb.andWhere(
+        'appointment.requestedDate >= :from',
+        {
+          from: query.from,
+        },
+      );
     }
 
     if (query.to) {
-      qb.andWhere('appointment.requestedDate <= :to', { to: query.to });
+      qb.andWhere(
+        'appointment.requestedDate <= :to',
+        {
+          to: query.to,
+        },
+      );
     }
 
-    return qb
+    if (searchTerm) {
+      const search = `%${searchTerm}%`;
+
+      qb.andWhere(
+        new Brackets((builder) => {
+          builder
+            // Appointment basic fields
+            .where(
+              'CAST(appointment.id AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(appointment.requestedDate AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(appointment.startTime AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(appointment.endTime AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'appointment.type ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(appointment.status AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'appointment.reasonForVisit ILike :search',
+              { search },
+            )
+
+            // Patient
+            .orWhere(
+              'patientUser.firstName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.fatherName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.lastName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.email ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.phone ILike :search',
+              { search },
+            )
+
+            // Doctor
+            .orWhere(
+              'doctorUser.firstName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.fatherName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.lastName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.email ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.phone ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctor.specialization ILike :search',
+              { search },
+            )
+
+            // Clinic
+            .orWhere(
+              'clinic.name ILike :search',
+              { search },
+            );
+        }),
+      );
+    }
+
+    qb
       .orderBy('appointment.requestedDate', 'DESC')
       .addOrderBy('appointment.startTime', 'DESC')
-      .getMany();
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
   }
 
   async cancelAppointment(

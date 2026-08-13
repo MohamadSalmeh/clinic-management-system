@@ -66,7 +66,7 @@ export class QueuesService {
     @InjectRepository(SystemSetting)
     private readonly systemSettingRepository: Repository<SystemSetting>,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+  ) { }
 
   // ============================================================
   // 1️⃣ createQueueEntry() - المعدلة
@@ -278,6 +278,7 @@ export class QueuesService {
       queue.startedTime = currentTime;
 
       if (queue.appointment) {
+        queue.appointment.status = 'in_progress';
         queue.appointment.actualStartTime = currentTime;
         await transactionalAppointmentRepo.save(queue.appointment);
       }
