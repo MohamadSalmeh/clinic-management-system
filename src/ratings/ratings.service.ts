@@ -9,10 +9,10 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Rating } from './entities/rating.entity';
 import { RatingReport } from './entities/rating-report.entity';
-import { CreateRatingDto, ReportRatingDto, RatingQueryDto } from './dto';
+import { CreateRatingDto, ReportRatingDto, RatingQueryDto, AdminRatingQueryDto,AdminRatingReportsQueryDto } from './dto';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { ReportStatus } from './enums/report-status.enum';
 import { RatingStatus } from './enums/rating-status.enum';
@@ -40,7 +40,7 @@ export class RatingsService {
     @Inject(forwardRef(() => AppointmentsService))
     private readonly appointmentsService: AppointmentsService,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+  ) { }
 
   private async syncAverages(doctorId: number): Promise<void> {
     const doctorAvg = await this.calculateDoctorAverageRating(doctorId);
@@ -62,7 +62,7 @@ export class RatingsService {
       });
     }
   }
-async createRating(userId: number, dto: CreateRatingDto): Promise<Rating> {
+  async createRating(userId: number, dto: CreateRatingDto): Promise<Rating> {
     const patient = await this.patientProfileRepository.findOne({
       where: { userId },
     });
@@ -116,7 +116,7 @@ async createRating(userId: number, dto: CreateRatingDto): Promise<Rating> {
     });
 
     const savedRating = await this.ratingRepository.save(rating);
-    
+
     // تحديث المتوسطات بناءً على السجل الجديد الفعال
     await this.syncAverages(Number(appointment.doctorId));
 
@@ -135,7 +135,7 @@ async createRating(userId: number, dto: CreateRatingDto): Promise<Rating> {
         }),
       );
     }
-    
+
     return savedRating;
   }
 
@@ -443,5 +443,295 @@ async createRating(userId: number, dto: CreateRatingDto): Promise<Rating> {
     }
 
     return Number(Number(result.average).toFixed(1));
+  }
+  async adminGetAllRatingsPaginated(
+    query: AdminRatingQueryDto,
+  ): Promise<{
+    data: Rating[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = Math.max(Number(query.page) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(query.limit) || 10, 1),
+      100,
+    );
+
+    const searchTerm = query.search?.trim();
+
+    const queryBuilder = this.ratingRepository
+      .createQueryBuilder('rating')
+      .leftJoinAndSelect('rating.patientProfile', 'patientProfile')
+      .leftJoinAndSelect('patientProfile.user', 'patientUser')
+      .leftJoinAndSelect('rating.doctorProfile', 'doctorProfile')
+      .leftJoinAndSelect('doctorProfile.user', 'doctorUser');
+
+    if (query.status) {
+      queryBuilder.andWhere('rating.status = :status', {
+        status: query.status,
+      });
+    }
+
+    if (query.score !== undefined) {
+      queryBuilder.andWhere('rating.score = :score', {
+        score: query.score,
+      });
+    }
+
+    if (query.doctorId !== undefined) {
+      queryBuilder.andWhere(
+        'rating.doctor_profile_id = :doctorId',
+        {
+          doctorId: query.doctorId,
+        },
+      );
+    }
+
+    if (query.patientId !== undefined) {
+      queryBuilder.andWhere(
+        'rating.patient_profile_id = :patientId',
+        {
+          patientId: query.patientId,
+        },
+      );
+    }
+
+    if (searchTerm) {
+      const search = `%${searchTerm}%`;
+
+      queryBuilder.andWhere(
+        new Brackets((builder) => {
+          builder
+            .where(
+              'CAST(rating.id AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(rating.score AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'rating.comment ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(rating.status AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.firstName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.fatherName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.lastName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.email ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.phone ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.firstName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.fatherName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.lastName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.email ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.phone ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorProfile.specialization ILike :search',
+              { search },
+            );
+        }),
+      );
+    }
+
+    queryBuilder
+      .orderBy('rating.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] =
+      await queryBuilder.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
+  }
+  async adminGetAllReportsPaginated(
+    query: AdminRatingReportsQueryDto,
+  ): Promise<{
+    data: RatingReport[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = Math.max(Number(query.page) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(query.limit) || 10, 1),
+      100,
+    );
+
+    const searchTerm = query.search?.trim();
+
+    const queryBuilder = this.reportRepository
+      .createQueryBuilder('report')
+      .leftJoinAndSelect(
+        'report.reporterPatient',
+        'reporterPatient',
+      )
+      .leftJoinAndSelect(
+        'reporterPatient.user',
+        'patientUser',
+      )
+      .leftJoinAndSelect(
+        'report.rating',
+        'rating',
+      )
+      .leftJoinAndSelect(
+        'rating.doctorProfile',
+        'doctorProfile',
+      )
+      .leftJoinAndSelect(
+        'doctorProfile.user',
+        'doctorUser',
+      );
+
+    if (query.status) {
+      queryBuilder.andWhere(
+        'report.status = :status',
+        {
+          status: query.status,
+        },
+      );
+    }
+
+    if (query.reason) {
+      queryBuilder.andWhere(
+        'report.reason = :reason',
+        {
+          reason: query.reason,
+        },
+      );
+    }
+
+    if (searchTerm) {
+      const search = `%${searchTerm}%`;
+
+      queryBuilder.andWhere(
+        new Brackets((builder) => {
+          builder
+            .where(
+              'CAST(report.id AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(report.ratingId AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'report.explanation ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(report.reason AS TEXT) ILike :search',
+              { search },
+            )
+            .orWhere(
+              'CAST(report.status AS TEXT) ILike :search',
+              { search },
+            )
+
+            // Patient
+            .orWhere(
+              'patientUser.firstName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.fatherName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.lastName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.email ILike :search',
+              { search },
+            )
+            .orWhere(
+              'patientUser.phone ILike :search',
+              { search },
+            )
+
+            // Doctor
+            .orWhere(
+              'doctorUser.firstName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.fatherName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.lastName ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.email ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorUser.phone ILike :search',
+              { search },
+            )
+            .orWhere(
+              'doctorProfile.specialization ILike :search',
+              { search },
+            );
+        }),
+      );
+    }
+
+    queryBuilder
+      .orderBy('report.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] =
+      await queryBuilder.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
   }
 }

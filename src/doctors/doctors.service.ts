@@ -41,6 +41,10 @@ export type AdminDoctorsQuery = {
   clinicId?: string;
   specialization?: string;
 };
+export type AdminDoctorListItem = DoctorProfile & {
+  profileCompletion: DoctorProfileCompletionStatus;
+};
+
 
 @Injectable()
 export class DoctorsService {
@@ -285,7 +289,7 @@ export class DoctorsService {
   async findAllForAdmin(
     query: AdminDoctorsQuery,
   ): Promise<{
-    data: DoctorProfile[];
+    data: AdminDoctorListItem[];
     total: number;
     page: number;
     limit: number;
@@ -377,7 +381,16 @@ export class DoctorsService {
       .skip((page - 1) * limit)
       .take(limit);
 
-    const [data, total] = await qb.getManyAndCount();
+    const [doctors, total] = await qb.getManyAndCount();
+
+    const data: AdminDoctorListItem[] = doctors.map((doctor) => {
+      const adminDoctor = doctor as AdminDoctorListItem;
+
+      adminDoctor.profileCompletion =
+        this.buildCompletionStatus(doctor);
+
+      return adminDoctor;
+    });
 
     return {
       data,

@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { RatingsService } from './ratings.service';
-import { CreateRatingDto, RatingQueryDto, ReportRatingDto } from './dto';
+import { AdminRatingQueryDto, AdminRatingReportsQueryDto, CreateRatingDto, RatingQueryDto, ReportRatingDto } from './dto';
 import { AuthRolesGuard } from '../auth/guards';
 import { CurrentUser, Public, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
@@ -21,7 +21,7 @@ import { publicDecrypt } from 'crypto';
 @Controller('ratings')
 @UseGuards(AuthRolesGuard)
 export class RatingsController {
-  constructor(private readonly ratingsService: RatingsService) {}
+  constructor(private readonly ratingsService: RatingsService) { }
 
   @Post()
   @Roles(UserRole.PATIENT)
@@ -81,8 +81,10 @@ export class RatingsController {
 
   @Get('admin/all')
   @Roles(UserRole.ADMIN)
-  async adminGetAllRatings(@Query() query: any) {
-    return await this.ratingsService.adminGetAllRatings(query);
+  async adminGetAllRatings(
+    @Query() query: AdminRatingQueryDto,
+  ) {
+    return await this.ratingsService.adminGetAllRatingsPaginated(query);
   }
 
   @Patch('admin/:id/status')
@@ -96,8 +98,12 @@ export class RatingsController {
 
   @Get('admin/reports')
   @Roles(UserRole.ADMIN)
-  async adminGetAllReports(@Query() query: any) {
-    return await this.ratingsService.adminGetAllReports(query);
+  async adminGetAllReports(
+    @Query() query: AdminRatingReportsQueryDto,
+  ) {
+    return await this.ratingsService.adminGetAllReportsPaginated(
+      query,
+    );
   }
 
   @Patch('admin/reports/:id/resolve')
