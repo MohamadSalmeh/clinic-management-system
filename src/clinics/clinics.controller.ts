@@ -8,12 +8,13 @@ import {
   Patch,
   Post,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { AuthRolesGuard } from '../auth/guards';
 import { Roles } from '../common/decorators';
 import { UserRole } from '../utils';
 import { Clinic } from './entities/clinic.entity';
-import { CreateClinicDto, UpdateClinicDto } from './dto';
+import { CreateClinicDto, UpdateClinicDto ,AdminClinicQueryDto,} from './dto';
 import { ClinicsService } from './clinics.service';
 
 @Controller('clinics')
@@ -24,6 +25,19 @@ export class ClinicsController {
   async findAll(): Promise<Clinic[]> {
     return this.clinicsService.findAll();
   }
+  @Get('admin')
+@UseGuards(AuthRolesGuard)
+@Roles(UserRole.ADMIN)
+async findAllForAdmin(
+  @Query() query: AdminClinicQueryDto,
+): Promise<{
+  data: Clinic[];
+  total: number;
+  page: number;
+  limit: number;
+}> {
+  return this.clinicsService.findAllForAdmin(query);
+}
 
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<Clinic> {

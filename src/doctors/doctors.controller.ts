@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseIntPipe, Patch, Query, UseGuards } f
 import { AuthRolesGuard } from '../auth/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
-import { UpdateDoctorProfileDto } from './dto';
+import { UpdateDoctorProfileDto, UpdateDoctorStatusDto} from './dto';
 import {
   DoctorsService,
   DoctorProfileCompletionStatus,
@@ -38,6 +38,18 @@ export class DoctorsController {
   async findAll(@Query() query: DoctorSearchQuery): Promise<DoctorProfile[]> {
     return this.doctorsService.findAll(query);
   }
+  @Patch(':doctorId/status')
+@UseGuards(AuthRolesGuard)
+@Roles(UserRole.ADMIN)
+updateDoctorStatus(
+  @Param('doctorId', ParseIntPipe) doctorId: number,
+  @Body() dto: UpdateDoctorStatusDto,
+): Promise<DoctorProfile> {
+  return this.doctorsService.updateDoctorStatus(
+    doctorId,
+    dto,
+  );
+}
 
 
   @Get(':id')
