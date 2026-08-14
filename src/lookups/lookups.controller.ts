@@ -14,7 +14,7 @@ import { AuthRolesGuard } from '../auth/guards';
 import { Roles } from '../common/decorators';
 import { UserRole } from '../utils';
 import { Lookup } from './entities/lookup.entity';
-import { CreateLookupDto, LookupQueryDto, UpdateLookupDto } from './dto';
+import { CreateLookupDto, LookupQueryDto, UpdateLookupDto,AdminLookupQueryDto } from './dto';
 import { LookupsService } from './lookups.service';
 
 @Controller('lookups')
@@ -32,6 +32,14 @@ export class LookupsController {
   async create(@Body() dto: CreateLookupDto): Promise<Lookup> {
     return this.lookupsService.create(dto);
   }
+  @Get('admin')
+@UseGuards(AuthRolesGuard)
+@Roles(UserRole.ADMIN)
+async findAllForAdmin(
+  @Query() query: AdminLookupQueryDto,
+): Promise<Lookup[]> {
+  return this.lookupsService.findAllForAdmin(query);
+}
 
   @Get(':id')
   @UseGuards(AuthRolesGuard)

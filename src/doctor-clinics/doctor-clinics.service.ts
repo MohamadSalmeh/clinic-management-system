@@ -11,7 +11,7 @@ import { AssignDoctorDto } from './dto';
 import { Clinic } from '../clinics/entities/clinic.entity';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { ClinicStatus } from '../clinics/enums/clinic-status.enum';
-
+import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
 @Injectable()
 export class DoctorClinicsService {
   constructor(
@@ -89,7 +89,7 @@ export class DoctorClinicsService {
     return assignments.map((assignment) => assignment.clinic);
   }
 
-  async getDoctorsInClinic(clinicId: number): Promise<DoctorProfile[]> {
+  /*async getDoctorsInClinic(clinicId: number): Promise<DoctorProfile[]> {
     const clinic = await this.clinicRepository.findOne({
       where: { id: clinicId },
     });
@@ -104,5 +104,53 @@ export class DoctorClinicsService {
     });
 
     return assignments.map((assignment) => assignment.doctor);
+  }*/
+ async getDoctorsInClinic(
+  clinicId: number,
+): Promise<DoctorProfile[]> {
+  const clinic = await this.clinicRepository.findOne({
+    where: { id: clinicId },
+  });
+
+  if (!clinic) {
+    throw new NotFoundException('Clinic not found');
   }
+
+  const assignments = await this.doctorClinicRepository.find({
+    where: { clinicId },
+    relations: {
+      doctor: {
+        user: true,
+      },
+    },
+  });
+
+  return assignments
+    .map((assignment) => assignment.doctor)
+    .filter((doctor) => {
+      // 1. Doctor must be active
+      if (doctor.status !== DoctorProfileStatus.ACTIVE) {
+        return false;
+      }
+
+      // 2. Doctor profile must be complete
+      const user = doctor.user;
+
+      const profileComplete =
+        !!user?.birthDate &&
+        !!user?.gender &&
+        !!doctor.licenseNumber?.trim() &&
+        !!doctor.specialization?.trim() &&
+        !!doctor.subSpecialization?.trim();
+
+      if (!profileComplete) {
+        return false;
+      }
+
+      // 3. Assignment to this clinic is already guaranteed
+      //    because we queried by clinicId.
+      return true;
+    });
+}
+
 }

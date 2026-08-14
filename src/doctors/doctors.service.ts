@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { UpdateDoctorProfileDto } from './dto';
+import { UpdateDoctorProfileDto,UpdateDoctorStatusDto } from './dto';
 import { DoctorProfile } from './entities/doctor-profile.entity';
 import { User } from '../users/entities/user.entity';
 import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
@@ -607,4 +607,21 @@ export class DoctorsService {
       })),
     };
   }
+  async updateDoctorStatus(
+  doctorId: number,
+  dto: UpdateDoctorStatusDto,
+): Promise<DoctorProfile> {
+  const doctorProfile = await this.doctorProfileRepository.findOne({
+    where: { id: doctorId },
+    relations: { user: true },
+  });
+
+  if (!doctorProfile) {
+    throw new NotFoundException('Doctor profile not found');
+  }
+
+  doctorProfile.status = dto.status;
+
+  return this.doctorProfileRepository.save(doctorProfile);
+}
 }

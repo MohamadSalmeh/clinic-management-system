@@ -5,6 +5,14 @@ import { Clinic } from './entities/clinic.entity';
 import { CreateClinicDto, UpdateClinicDto } from './dto';
 import { DoctorClinic } from '../doctor-clinics/entities/doctor-clinic.entity';
 import { ClinicStatus } from './enums/clinic-status.enum';
+//
+
+import {
+  Brackets,
+} from 'typeorm';
+import {
+  AdminClinicQueryDto,
+} from './dto';
 
 @Injectable()
 export class ClinicsService {
@@ -80,4 +88,73 @@ export class ClinicsService {
     clinic.status = ClinicStatus.CLOSED;
     return this.clinicRepository.save(clinic);
   }
+  async findAllForAdmin(
+  query: AdminClinicQueryDto,
+): Promise<{
+  data: Clinic[];
+  total: number;
+  page: number;
+  limit: number;
+}> {
+  const page = Math.max(
+    Number(query.page) || 1,
+    1,
+  );
+
+  const limit = Math.min(
+    Math.max(
+      Number(query.limit) || 10,
+      1,
+    ),
+    100,
+  );
+
+  const searchTerm = query.search?.trim();
+
+  const qb = this.clinicRepository
+    .createQueryBuilder('clinic');
+
+  if (query.status) {
+    qb.andWhere('clinic.status = :status', {
+      status: query.status,
+    });
+  }
+
+  if (searchTerm) {
+    const search = `%${searchTerm}%`;
+
+    qb.andWhere(
+      new Brackets((builder) => {
+        builder
+          .where(
+            'clinic.name ILike :search',
+            { search },
+          )
+          .orWhere(
+            'clinic.description ILike :search',
+            { search },
+          )
+          .orWhere(
+            'clinic.location ILike :search',
+            { search },
+          );
+      }),
+    );
+  }
+
+  qb
+    .orderBy('clinic.name', 'ASC')
+    .skip((page - 1) * limit)
+    .take(limit);
+
+  const [data, total] =
+    await qb.getManyAndCount();
+
+  return {
+    data,
+    total,
+    page,
+    limit,
+  };
+}
 }

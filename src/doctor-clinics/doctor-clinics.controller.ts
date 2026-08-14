@@ -46,9 +46,9 @@ export class DoctorClinicsController {
   }
 
   @Get('clinics/:clinicId/doctors')
-  async getDoctorsInClinic(
-    @Param('clinicId', ParseIntPipe) clinicId: number,
-  ): Promise<DoctorProfile[]> {
-    return this.doctorClinicsService.getDoctorsInClinic(clinicId);
-  }
+async getDoctorsInClinic(
+  @Param('clinicId', ParseIntPipe) clinicId: number,
+): Promise<DoctorProfile[]> {
+  return this.doctorClinicsService.getDoctorsInClinic(clinicId);
+}
 }

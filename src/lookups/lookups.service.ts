@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
 import { Lookup } from './entities/lookup.entity';
-import { CreateLookupDto, LookupQueryDto, UpdateLookupDto } from './dto';
+import { CreateLookupDto, LookupQueryDto, UpdateLookupDto, AdminLookupQueryDto } from './dto';
 
 @Injectable()
 export class LookupsService {
@@ -88,4 +88,20 @@ export class LookupsService {
     const lookup = await this.findOne(id);
     await this.lookupRepository.remove(lookup);
   }
+  async findAllForAdmin(
+  query: AdminLookupQueryDto,
+): Promise<Lookup[]> {
+  const where: FindOptionsWhere<Lookup> = {};
+
+  if (query.category) {
+    where.category = query.category;
+  }
+
+  return this.lookupRepository.find({
+    where,
+    order: {
+      labelEn: 'ASC',
+    },
+  });
+}
 }
