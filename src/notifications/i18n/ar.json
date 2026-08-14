@@ -106,5 +106,9 @@
   "operation.created": {
     "title": "تم جدولة عملية",
     "body": "تم جدولة عملية لك بتاريخ {requestedDate} من {startTime} إلى {endTime}. يرجى إتمام عملية الدفع قبل موعد العملية."
-  }
+  },
+  "waitlist.slot.available": {
+  "title": "توفر موعد في قائمة الانتظار",
+  "body": "أصبح هناك موعد متاح للطبيب في العيادة بتاريخ {requestedDate} من {startTime} إلى {endTime}."
+}
 }

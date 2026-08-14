@@ -212,7 +212,11 @@ export class QueuesService {
       .leftJoinAndSelect('queue.clinic', 'clinic')
       .where('queue.doctor_id = :doctorId', { doctorId: doctorProfile.id })
       .andWhere('queue.status IN (:...statuses)', {
-        statuses: [QueueStatus.WAITING, QueueStatus.IN_PROGRESS],
+        statuses: [
+          QueueStatus.WAITING,
+          QueueStatus.CALLING,
+          QueueStatus.IN_PROGRESS,
+        ],
       })
       .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
         startOfToday: startOfTodayDate,
