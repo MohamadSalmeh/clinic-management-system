@@ -6,9 +6,10 @@ import { DoctorLeave } from './entities/doctor-leaves.entity';
 import { CreateDoctorLeaveDto, DoctorLeaveQueryDto } from './dto';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { Appointment } from '../appointments/entities/appointment.entity';
-import { AppointmentCancelledEvent } from '../notifications/events';
+import { AppointmentCancelledEvent, WalletTransactionEvent } from '../notifications/events';
 import { nowDate, toDateOnly, toDateString } from '../common/utils/date-utils';
-
+import { forwardRef, Inject } from '@nestjs/common';
+import { AppointmentsService } from '../appointments/appointments.service';
 const LEAVE_CANCELLATION_REASON = 'إلغاء تلقائي بسبب إجازة طارئة للطبيب';
 
 @Injectable()
@@ -22,6 +23,8 @@ export class DoctorLeavesService {
     private readonly appointmentRepository: Repository<Appointment>,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
+    @Inject(forwardRef(() => AppointmentsService))
+    private readonly appointmentsService: AppointmentsService,
   ) { }
 
   async createLeave(
@@ -37,7 +40,9 @@ export class DoctorLeavesService {
     const result = await this.dataSource.transaction(async (manager) => {
       const leaveRepository = manager.getRepository(DoctorLeave);
       const appointmentRepository = manager.getRepository(Appointment);
+      //const cancellationEvents: AppointmentCancelledEvent[] = [];
       const cancellationEvents: AppointmentCancelledEvent[] = [];
+      const walletEvents: WalletTransactionEvent[] = [];
 
       const existingLeaves = await leaveRepository.find({
         where: {
@@ -79,10 +84,41 @@ export class DoctorLeavesService {
       );
 
       for (const appointment of impactedAppointments) {
+        /*appointment.status = 'cancelled';
+        appointment.cancellationReason = LEAVE_CANCELLATION_REASON;
+        appointment.cancelledAt = nowDate();
+        await appointmentRepository.save(appointment);*/
         appointment.status = 'cancelled';
         appointment.cancellationReason = LEAVE_CANCELLATION_REASON;
         appointment.cancelledAt = nowDate();
+
+
+        /*await this.appointmentsService.refundAppointmentPayment(
+          appointment,
+          manager,
+        );
+        
+        
+        await appointmentRepository.save(appointment);*/
+        const refundResult =
+          await this.appointmentsService.refundAppointmentPayment(
+            appointment,
+            manager,
+          );
+
+
         await appointmentRepository.save(appointment);
+        if (refundResult.walletEvent) {
+          walletEvents.push(refundResult.walletEvent);
+        }
+
+
+        /*if (refundResult.walletEvent) {
+          await this.eventEmitter.emitAsync(
+            WalletTransactionEvent.eventName,
+            refundResult.walletEvent,
+          );
+        }*/
 
         if (appointment.patient?.userId) {
           cancellationEvents.push(
@@ -102,15 +138,22 @@ export class DoctorLeavesService {
       return {
         leave: await leaveRepository.save(leave),
         cancellationEvents,
+        walletEvents,
       };
     });
-
+    for (const walletEvent of result.walletEvents) {
+      await this.eventEmitter.emitAsync(
+        WalletTransactionEvent.eventName,
+        walletEvent,
+      );
+    }
     for (const cancellationEvent of result.cancellationEvents) {
       await this.eventEmitter.emitAsync(
         AppointmentCancelledEvent.eventName,
         cancellationEvent,
       );
     }
+
 
     return result.leave;
   }
