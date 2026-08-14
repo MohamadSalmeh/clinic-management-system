@@ -23,6 +23,7 @@ import { ReferralsModule } from '../referrals/referrals.module';
 import { SystemSettingsModule } from '../system-setting/system-settings.module';
 import { WaitlistModule } from '../waitlists/waitlists.module';
 import { Waitlist } from '../waitlists/entities/waitlist.entity';
+import { DoctorLeavesModule } from '../doctor-leaves/doctor-leaves.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { Waitlist } from '../waitlists/entities/waitlist.entity';
       User,
       Waitlist
     ]),
+    forwardRef(() => DoctorLeavesModule),
     AuthModule,
     MedicalProfilesModule,
     SystemSettingsModule,
