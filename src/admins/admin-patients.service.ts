@@ -383,9 +383,7 @@ export class AdminPatientsService {
           newValue: log.newValue ?? null,
           changeReason: log.changeReason ?? null,
           appointmentId: log.appointmentId ?? null,
-          createdAt: log.created_at
-            ? toDateString(new Date(log.created_at))
-            : null,
+          createdAt: log.created_at,
           changedBy: log.user
             ? {
                 id: log.user.id,
