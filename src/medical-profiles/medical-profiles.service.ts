@@ -289,7 +289,10 @@ export class MedicalProfilesService {
  
      }*/
 
-    async getCompletionStatus(userId: number): Promise<MedicalProfileCompletionStatus> {
+
+    async getCompletionStatus(
+        userId: number,
+    ): Promise<MedicalProfileCompletionStatus> {
         const patientProfile = await this.patientProfileRepository.findOne({
             where: { userId },
             relations: {
@@ -309,6 +312,24 @@ export class MedicalProfilesService {
             throw new NotFoundException('Medical profile not found');
         }
 
+        // These fields require an explicit answer.
+        //
+        // For array fields:
+        //   null  = user did not answer -> incomplete
+        //   []    = user explicitly chose "No ..." -> complete
+        //   [...] = user selected values -> complete
+        //
+        // For currentSymptoms:
+        //   null  = user did not answer -> incomplete
+        //   ''    = user explicitly chose "No current symptoms" -> complete
+        //   text  = user entered symptoms -> complete
+        //
+        // For disabilityInfo:
+        //   null      = user did not answer -> incomplete
+        //   "NONE" or another lookup value = answered -> complete
+        //
+        // Family history, current medications, and vaccination status
+        // are intentionally optional and are NOT part of completion.
         const requiredFields: Array<keyof MedicalProfile> = [
             'bloodType',
             'disabilityInfo',
@@ -316,20 +337,61 @@ export class MedicalProfilesService {
             'allergies',
             'chronicConditions',
             'pastSurgeries',
-            'familyHistory',
-            'currentMedications',
             'lifestyleHabits',
-            'vaccinationStatus',
         ];
 
         if (patientProfile.user?.gender === Gender.FEMALE) {
             requiredFields.push('pregnancyStatus');
         }
 
-        const missingFields = requiredFields.filter((field) => medicalProfile[field] == null);
-        const completionPercentage = requiredFields.length === 0
-            ? 100
-            : Math.round(((requiredFields.length - missingFields.length) / requiredFields.length) * 100);
+        const missingFields = requiredFields.filter((field) => {
+            const value = medicalProfile[field];
+
+            // Multi-select fields:
+            // null = unanswered
+            // [] or non-empty array = answered
+            if (
+                field === 'allergies' ||
+                field === 'chronicConditions' ||
+                field === 'pastSurgeries' ||
+                field === 'lifestyleHabits'
+            ) {
+                return value === null || value === undefined;
+            }
+
+            // Blood type, disability info and pregnancy status:
+            // null/undefined = unanswered
+            if (
+                field === 'bloodType' ||
+                field === 'disabilityInfo' ||
+                field === 'pregnancyStatus'
+            ) {
+                return (
+                    value === null ||
+                    value === undefined ||
+                    (typeof value === 'string' && value.trim() === '')
+                );
+            }
+
+            // Current symptoms:
+            // null = unanswered
+            // empty string = explicitly "No current symptoms"
+            // non-empty string = answered with symptoms
+            if (field === 'currentSymptoms') {
+                return value === null || value === undefined;
+            }
+
+            return value === null || value === undefined;
+        });
+
+        const completionPercentage =
+            requiredFields.length === 0
+                ? 100
+                : Math.round(
+                    ((requiredFields.length - missingFields.length) /
+                        requiredFields.length) *
+                    100,
+                );
 
         return {
             completed: missingFields.length === 0,

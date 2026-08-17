@@ -12,13 +12,7 @@ export class LookupsSeeder implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    const existingCount = await this.lookupRepository.count();
-
-    if (existingCount > 0) {
-      return;
-    }
-
-    const specialtySeeds = await this.lookupRepository.save([
+    const specialtySeeds = [
       this.lookupRepository.create({
         category: LookupCategory.MEDICAL_SPECIALTY,
         value: 'CARDIOLOGY',
@@ -40,9 +34,16 @@ export class LookupsSeeder implements OnApplicationBootstrap {
         labelAr: 'عيادة الأطفال',
         isActive: true,
       }),
-    ]);
+    ];
 
-    const conditionCategorySeeds = await this.lookupRepository.save([
+    const savedSpecialties = await this.ensureSeeds(specialtySeeds);
+
+    const specialtyMap = new Map<string, number>();
+    for (const specialty of savedSpecialties) {
+      specialtyMap.set(specialty.value, specialty.id);
+    }
+
+    const conditionCategorySeeds = [
       this.lookupRepository.create({
         category: LookupCategory.CHRONIC_CONDITION_CATEGORY,
         value: 'GASTROENTEROLOGY_DISEASES',
@@ -57,19 +58,20 @@ export class LookupsSeeder implements OnApplicationBootstrap {
         labelAr: 'أمراض الجهاز التنفسي',
         isActive: true,
       }),
-    ]);
+    ];
 
-    const specialtyMap = new Map<string, number>();
-    for (const specialty of specialtySeeds) {
-      specialtyMap.set(specialty.value, specialty.id);
-    }
+    const savedConditionCategories =
+      await this.ensureSeeds(conditionCategorySeeds);
 
     const conditionCategoryMap = new Map<string, number>();
-    for (const category of conditionCategorySeeds) {
+    for (const category of savedConditionCategories) {
       conditionCategoryMap.set(category.value, category.id);
     }
 
-    const baselineSeeds = [
+    const baselineSeeds: Lookup[] = [
+      // ============================================================
+      // Blood Types
+      // ============================================================
       ...this.buildSimpleSeeds(LookupCategory.BLOOD_TYPE, [
         'A+',
         'A-',
@@ -80,44 +82,105 @@ export class LookupsSeeder implements OnApplicationBootstrap {
         'AB+',
         'AB-',
       ]),
+
+      // ============================================================
+      // Allergies
+      // ============================================================
       ...this.buildSimpleSeeds(LookupCategory.ALLERGY, [
         'Penicillin',
         'Peanut',
         'Dust',
         'Latex',
       ]),
+
+      // ============================================================
+      // Disability Types
+      // ============================================================
+      ...this.buildSimpleSeeds(LookupCategory.DISABILITY_TYPES, [
+        'NONE',
+        'PHYSICAL_DISABILITY',
+        'VISUAL_IMPAIRMENT',
+        'HEARING_IMPAIRMENT',
+        'SPEECH_IMPAIRMENT',
+        'INTELLECTUAL_DISABILITY',
+        'OTHER',
+      ]),
+
+      // ============================================================
+      // Common Surgeries
+      // ============================================================
+      ...this.buildSimpleSeeds(LookupCategory.COMMON_SURGERIES, [
+        'APPENDECTOMY',
+        'GALLBLADDER_REMOVAL',
+        'HERNIA_REPAIR',
+        'CESAREAN_SECTION',
+        'KNEE_SURGERY',
+        'HIP_REPLACEMENT',
+        'HEART_SURGERY',
+        'CATARACT_SURGERY',
+        'OTHER',
+      ]),
+
+      // ============================================================
+      // Lifestyle Habits
+      // ============================================================
+      ...this.buildSimpleSeeds(LookupCategory.LIFESTYLE_HABITS, [
+        'SMOKING',
+        'ALCOHOL',
+        'REGULAR_EXERCISE',
+        'SEDENTARY_LIFESTYLE',
+        'HEALTHY_DIET',
+        'UNHEALTHY_DIET',
+        'IRREGULAR_SLEEP',
+        'OTHER',
+      ]),
+
+      // ============================================================
+      // Chronic Conditions
+      // ============================================================
       this.lookupRepository.create({
         category: LookupCategory.CHRONIC_CONDITION,
         value: 'IRRITABLE_BOWEL_SYNDROME',
         labelEn: 'Irritable Bowel Syndrome',
         labelAr: 'القولون العصبي',
-        parentId: conditionCategoryMap.get('GASTROENTEROLOGY_DISEASES') ?? null,
+        parentId:
+          conditionCategoryMap.get('GASTROENTEROLOGY_DISEASES') ?? null,
         isActive: true,
       }),
+
       this.lookupRepository.create({
         category: LookupCategory.CHRONIC_CONDITION,
         value: 'GASTRIC_ULCER',
         labelEn: 'Gastric Ulcer',
         labelAr: 'قرحة المعدة',
-        parentId: conditionCategoryMap.get('GASTROENTEROLOGY_DISEASES') ?? null,
+        parentId:
+          conditionCategoryMap.get('GASTROENTEROLOGY_DISEASES') ?? null,
         isActive: true,
       }),
+
       this.lookupRepository.create({
         category: LookupCategory.CHRONIC_CONDITION,
         value: 'ASTHMA',
         labelEn: 'Asthma',
         labelAr: 'الربو',
-        parentId: conditionCategoryMap.get('RESPIRATORY_DISEASES') ?? null,
+        parentId:
+          conditionCategoryMap.get('RESPIRATORY_DISEASES') ?? null,
         isActive: true,
       }),
+
       this.lookupRepository.create({
         category: LookupCategory.CHRONIC_CONDITION,
         value: 'CHRONIC_BRONCHITIS',
         labelEn: 'Chronic Bronchitis',
         labelAr: 'التهاب القصبات المزمن',
-        parentId: conditionCategoryMap.get('RESPIRATORY_DISEASES') ?? null,
+        parentId:
+          conditionCategoryMap.get('RESPIRATORY_DISEASES') ?? null,
         isActive: true,
       }),
+
+      // ============================================================
+      // Medical Sub-Specialties
+      // ============================================================
       this.lookupRepository.create({
         category: LookupCategory.MEDICAL_SUB_SPECIALTY,
         value: 'INTERVENTIONAL_CARDIOLOGY',
@@ -126,6 +189,7 @@ export class LookupsSeeder implements OnApplicationBootstrap {
         parentId: specialtyMap.get('CARDIOLOGY') ?? null,
         isActive: true,
       }),
+
       this.lookupRepository.create({
         category: LookupCategory.MEDICAL_SUB_SPECIALTY,
         value: 'PEDIATRIC_CARDIOLOGY',
@@ -134,6 +198,7 @@ export class LookupsSeeder implements OnApplicationBootstrap {
         parentId: specialtyMap.get('CARDIOLOGY') ?? null,
         isActive: true,
       }),
+
       this.lookupRepository.create({
         category: LookupCategory.MEDICAL_SUB_SPECIALTY,
         value: 'JOINT_REPLACEMENT',
@@ -142,6 +207,7 @@ export class LookupsSeeder implements OnApplicationBootstrap {
         parentId: specialtyMap.get('ORTHOPEDICS') ?? null,
         isActive: true,
       }),
+
       this.lookupRepository.create({
         category: LookupCategory.MEDICAL_SUB_SPECIALTY,
         value: 'ARTHROSCOPY_SPORTS_MEDICINE',
@@ -152,10 +218,40 @@ export class LookupsSeeder implements OnApplicationBootstrap {
       }),
     ];
 
-    await this.lookupRepository.save(baselineSeeds);
+    await this.ensureSeeds(baselineSeeds);
   }
 
-  private buildSimpleSeeds(category: LookupCategory, values: string[]): Lookup[] {
+  /**
+   * Adds only missing lookup records.
+   * Existing records are left unchanged.
+   */
+  private async ensureSeeds(seeds: Lookup[]): Promise<Lookup[]> {
+    const saved: Lookup[] = [];
+
+    for (const seed of seeds) {
+      const existing = await this.lookupRepository.findOne({
+        where: {
+          category: seed.category,
+          value: seed.value,
+        },
+      });
+
+      if (existing) {
+        saved.push(existing);
+        continue;
+      }
+
+      const created = await this.lookupRepository.save(seed);
+      saved.push(created);
+    }
+
+    return saved;
+  }
+
+  private buildSimpleSeeds(
+    category: LookupCategory,
+    values: string[],
+  ): Lookup[] {
     return values.map((value) =>
       this.lookupRepository.create({
         category,
