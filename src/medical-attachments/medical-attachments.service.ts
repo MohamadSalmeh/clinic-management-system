@@ -309,7 +309,6 @@ export class MedicalAttachmentsService {
     async getMyAttachments(
         currentUser: ActiveUserData,
     ) {
-
         const patient = await this.patientRepository.findOne({
             where: {
                 userId: currentUser.sub,
@@ -336,45 +335,58 @@ export class MedicalAttachmentsService {
             },
         });
 
-        const historyIds = histories.map(history => history.id);
+        const historyIds = histories.map((history) => history.id);
 
-        const profileAttachments =
-            await this.attachmentRepository.find({
-                where: {
-                    medicalProfileId: medicalProfile.id,
-                    medicalHistoryId: IsNull(),
-                },
-
-                order: {
-                    created_at: 'DESC',
-                },
-            });
+        const profileAttachments = await this.attachmentRepository.find({
+            where: {
+                medicalProfileId: medicalProfile.id,
+                medicalHistoryId: IsNull(),
+            },
+            relations: {
+                user: true,
+            },
+            order: {
+                created_at: 'DESC',
+            },
+        });
 
         let historyAttachments: MedicalAttachment[] = [];
 
         if (historyIds.length > 0) {
-
-            historyAttachments =
-                await this.attachmentRepository.find({
-
-                    where: {
-                        medicalHistoryId: In(historyIds),
-                    },
-
-                    relations: {
-                        medicalHistory: true,
-                    },
-
-                    order: {
-                        created_at: 'DESC',
-                    },
-                });
-
+            historyAttachments = await this.attachmentRepository.find({
+                where: {
+                    medicalHistoryId: In(historyIds),
+                },
+                relations: {
+                    medicalHistory: true,
+                    user: true,
+                },
+                order: {
+                    created_at: 'DESC',
+                },
+            });
         }
 
+        const mapAttachment = (attachment: MedicalAttachment) => {
+            const isCurrentPatient =
+                Number(attachment.userId) === Number(currentUser.sub);
+
+            const fullName = attachment.user?.fullName?.trim() || null;
+
+            return {
+                ...attachment,
+
+                uploaderName: isCurrentPatient ? null : fullName,
+
+                uploaderRole: attachment.user?.role ?? null,
+
+                isUploadedByCurrentPatient: isCurrentPatient,
+            };
+        };
+
         return {
-            profileAttachments,
-            historyAttachments,
+            profileAttachments: profileAttachments.map(mapAttachment),
+            historyAttachments: historyAttachments.map(mapAttachment),
         };
     }
     async getPatientAttachments(
