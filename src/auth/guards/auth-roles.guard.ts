@@ -15,6 +15,7 @@ import { ROLES_KEY } from '../../common/decorators';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator'; 
 import { ActiveUserData, CURRENT_USER_KEY, UserRole } from '../../utils';
 import { User } from '../../users/entities/user.entity';
+import { DoctorProfileStatus } from '../../users/enums/doctor-profile-status.enum';
 
 type RequestWithUser = Request & {
   [CURRENT_USER_KEY]?: ActiveUserData;
@@ -78,6 +79,18 @@ export class AuthRolesGuard implements CanActivate {
       throw new UnauthorizedException('Token has been revoked');
     }
 
+    const userRole = payload.usertype.toLowerCase() as UserRole;
+    if (userRole === UserRole.DOCTOR) {
+      const doctorUser = await this.userRepository.findOne({
+        where: { id: user.id },
+        relations: { doctorProfile: true },
+      });
+
+      if (doctorUser?.doctorProfile?.status !== DoctorProfileStatus.ACTIVE) {
+        throw new UnauthorizedException('Doctor account is inactive');
+      }
+    }
+
     request[CURRENT_USER_KEY] = payload;
     request.userIsVerified = user.isVerified;
 
@@ -85,7 +98,6 @@ export class AuthRolesGuard implements CanActivate {
       return true;
     }
 
-    const userRole = payload.usertype.toLowerCase() as UserRole;
     const hasRole = requiredRoles.some((role: UserRole): boolean => role === userRole);
 
     if (!hasRole) {

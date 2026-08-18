@@ -31,6 +31,7 @@ import { DoctorInvitationsService } from '../doctor-invitations/doctor-invitatio
 import { DoctorInvitation } from '../doctor-invitations/entities/doctor-invitation.entity';
 import { DoctorInvitationStatus } from '../doctor-invitations/enums/doctor-invitation-status.enum';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
+import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
 import { AdminsService } from '../admins/admins.service';
 import { UserStatus } from '../users/enums/user-status.enum';
 import { MedicalProfilesService } from '../medical-profiles/medical-profiles.service';
@@ -338,6 +339,16 @@ export class AuthService {
 
     if (payload.version !== user.tokenVersion) {
       throw new UnauthorizedException('Refresh token has been revoked');
+    }
+
+    if (user.role === UserRole.DOCTOR) {
+      const doctorProfile = await this.dataSource
+        .getRepository(DoctorProfile)
+        .findOne({ where: { userId: user.id } });
+
+      if (doctorProfile?.status !== DoctorProfileStatus.ACTIVE) {
+        throw new UnauthorizedException('Doctor account is inactive');
+      }
     }
 
     const accessPayload = this.buildJwtPayload(user);
@@ -714,6 +725,16 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.role === UserRole.DOCTOR) {
+      const doctorProfile = await this.dataSource
+        .getRepository(DoctorProfile)
+        .findOne({ where: { userId: user.id } });
+
+      if (doctorProfile?.status !== DoctorProfileStatus.ACTIVE) {
+        throw new UnauthorizedException('Doctor account is inactive');
+      }
     }
 
     return user;
