@@ -1,24 +1,22 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { UpdateDoctorProfileDto,UpdateDoctorStatusDto } from './dto';
+import { UpdateDoctorProfileDto, UpdateDoctorStatusDto } from './dto';
 import { DoctorProfile } from './entities/doctor-profile.entity';
 import { User } from '../users/entities/user.entity';
 import { DoctorProfileStatus } from '../users/enums/doctor-profile-status.enum';
 import { DoctorAdminLogsService } from './doctor-admin-logs.service';
 import { DoctorAdminLogType } from './entities/doctor-admin-log.entity';
-import { toDateOnly, toDateString, todayDateString } from '../common/utils/date-utils'; // ✅ إضافة الاستيراد
 import {
-  Appointment,
-} from '../appointments/entities/appointment.entity';
+  toDateOnly,
+  toDateString,
+  todayDateString,
+} from '../common/utils/date-utils'; // ✅ إضافة الاستيراد
+import { Appointment } from '../appointments/entities/appointment.entity';
 
-import {
-  Queue,
-} from '../queues/entities/queue.entity';
+import { Queue } from '../queues/entities/queue.entity';
 
-import {
-  QueueStatus,
-} from '../queues/enums/queue-status.enum';
+import { QueueStatus } from '../queues/enums/queue-status.enum';
 export type DoctorProfileCompletionStatus = {
   isComplete: boolean;
   completionPercentage: number;
@@ -32,6 +30,26 @@ export type DoctorSearchQuery = {
   subSpecialization?: string;
   clinicId?: string;
   search?: string;
+
+  /**
+   * Filter doctors by one of their spoken languages.
+   * Example: Arabic
+   */
+  language?: string;
+
+  /**
+   * Sort doctors by:
+   * - experienceYears
+   * - averageRating
+   */
+  sortBy?: 'experienceYears' | 'averageRating';
+
+  /**
+   * Sort direction:
+   * - asc
+   * - desc
+   */
+  sortOrder?: 'asc' | 'desc';
 };
 export type AdminDoctorsQuery = {
   page?: string;
@@ -44,7 +62,6 @@ export type AdminDoctorsQuery = {
 export type AdminDoctorListItem = DoctorProfile & {
   profileCompletion: DoctorProfileCompletionStatus;
 };
-
 
 @Injectable()
 export class DoctorsService {
@@ -61,12 +78,15 @@ export class DoctorsService {
 
     @InjectRepository(Queue)
     private readonly queueRepository: Repository<Queue>,
-  ) { }
+  ) {}
 
   async updateProfile(
     userId: number,
     dto: UpdateDoctorProfileDto,
-  ): Promise<{ profile: DoctorProfile; completionStatus: DoctorProfileCompletionStatus }> {
+  ): Promise<{
+    profile: DoctorProfile;
+    completionStatus: DoctorProfileCompletionStatus;
+  }> {
     const profile = await this.doctorProfileRepository.findOne({
       where: { userId },
       relations: { user: true },
@@ -121,7 +141,10 @@ export class DoctorsService {
     }
 
     try {
-      if (profile.user && (dto.gender !== undefined || dto.birthDate !== undefined)) {
+      if (
+        profile.user &&
+        (dto.gender !== undefined || dto.birthDate !== undefined)
+      ) {
         await this.userRepository.save(profile.user);
       }
 
@@ -135,7 +158,10 @@ export class DoctorsService {
         throw new NotFoundException('Doctor profile not found');
       }
 
-      if (dto.initialVisitFee !== undefined && dto.initialVisitFee !== oldInitialVisitFee) {
+      if (
+        dto.initialVisitFee !== undefined &&
+        dto.initialVisitFee !== oldInitialVisitFee
+      ) {
         await this.doctorAdminLogsService.createLog(
           updatedProfile.id,
           DoctorAdminLogType.FEE_UPDATE,
@@ -147,7 +173,10 @@ export class DoctorsService {
         );
       }
 
-      if (dto.returnVisitFee !== undefined && dto.returnVisitFee !== oldReturnVisitFee) {
+      if (
+        dto.returnVisitFee !== undefined &&
+        dto.returnVisitFee !== oldReturnVisitFee
+      ) {
         await this.doctorAdminLogsService.createLog(
           updatedProfile.id,
           DoctorAdminLogType.FEE_UPDATE,
@@ -174,7 +203,10 @@ export class DoctorsService {
 
   async findMe(
     userId: number,
-  ): Promise<{ profile: DoctorProfile; completionStatus: DoctorProfileCompletionStatus }> {
+  ): Promise<{
+    profile: DoctorProfile;
+    completionStatus: DoctorProfileCompletionStatus;
+  }> {
     const profile = await this.doctorProfileRepository.findOne({
       where: { userId },
       relations: { user: true },
@@ -207,27 +239,58 @@ export class DoctorsService {
     const qb = this.doctorProfileRepository
       .createQueryBuilder('doctor')
       .leftJoinAndSelect('doctor.user', 'user')
-      .where('doctor.status = :status', { status: DoctorProfileStatus.ACTIVE })
-      .andWhere('doctor.isApproved = :isApproved', { isApproved: true });
+      .where('doctor.status = :status', {
+        status: DoctorProfileStatus.ACTIVE,
+      })
+      .andWhere('doctor.isApproved = :isApproved', {
+        isApproved: true,
+      });
+
+    // ============================================================
+    // SPECIALIZATION
+    // ============================================================
 
     const specialization = query.specialization ?? query.mainSpecializationId;
+
     if (specialization) {
-      qb.andWhere('doctor.specialization = :specialization', { specialization });
+      qb.andWhere('doctor.specialization = :specialization', {
+        specialization,
+      });
     }
 
-    const subSpecialization = query.subSpecialization ?? query.subSpecializationId;
+    // ============================================================
+    // SUB-SPECIALIZATION
+    // ============================================================
+
+    const subSpecialization =
+      query.subSpecialization ?? query.subSpecializationId;
+
     if (subSpecialization) {
-      qb.andWhere('doctor.subSpecialization = :subSpecialization', { subSpecialization });
+      qb.andWhere('doctor.subSpecialization = :subSpecialization', {
+        subSpecialization,
+      });
     }
+
+    // ============================================================
+    // CLINIC
+    // ============================================================
 
     const clinicId = this.parseOptionalNumber(query.clinicId);
+
     if (clinicId !== undefined) {
-      qb.innerJoin('doctor.clinicAssignments', 'clinicAssignment')
-        .andWhere('clinicAssignment.clinicId = :clinicId', { clinicId });
+      qb.innerJoin('doctor.clinicAssignments', 'clinicAssignment').andWhere(
+        'clinicAssignment.clinicId = :clinicId',
+        { clinicId },
+      );
     }
 
-    if (query.search) {
-      const search = `%${query.search}%`;
+    // ============================================================
+    // SEARCH
+    // ============================================================
+
+    if (query.search?.trim()) {
+      const search = `%${query.search.trim()}%`;
+
       qb.andWhere(
         new Brackets((builder) => {
           builder
@@ -238,6 +301,59 @@ export class DoctorsService {
             .orWhere('doctor.licenseNumber ILike :search', { search });
         }),
       );
+    }
+
+    // ============================================================
+    // LANGUAGE FILTER
+    // ============================================================
+    //
+    // languagesSpoken is stored as JSON.
+    // We check whether the requested language exists
+    // inside the JSON array.
+    //
+    // Example:
+    // ?language=Arabic
+    //
+    // ============================================================
+
+    if (query.language?.trim()) {
+      const language = query.language.trim();
+
+      qb.andWhere(
+        `
+          EXISTS (
+            SELECT 1
+            FROM json_array_elements_text(doctor.languages_spoken) AS spoken_language
+            WHERE LOWER(spoken_language) = LOWER(:language)
+          )
+        `,
+        { language },
+      );
+    }
+
+    // ============================================================
+    // SORTING
+    // ============================================================
+
+    const allowedSortFields = {
+      experienceYears: 'doctor.experienceYears',
+      averageRating: 'doctor.averageRating',
+    } as const;
+
+    const sortField =
+      query.sortBy && allowedSortFields[query.sortBy]
+        ? allowedSortFields[query.sortBy]
+        : null;
+
+    const sortOrder = query.sortOrder?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    if (sortField) {
+      qb.orderBy(sortField, sortOrder, 'NULLS LAST').addOrderBy(
+        'doctor.id',
+        'DESC',
+      );
+    } else {
+      qb.orderBy('doctor.id', 'DESC');
     }
 
     return qb.getMany();
@@ -257,15 +373,24 @@ export class DoctorsService {
       missingFields.push('gender');
     }
 
-    if (!doctorProfile.licenseNumber || doctorProfile.licenseNumber.trim().length === 0) {
+    if (
+      !doctorProfile.licenseNumber ||
+      doctorProfile.licenseNumber.trim().length === 0
+    ) {
       missingFields.push('syndicateNumber');
     }
 
-    if (!doctorProfile.specialization || doctorProfile.specialization.trim().length === 0) {
+    if (
+      !doctorProfile.specialization ||
+      doctorProfile.specialization.trim().length === 0
+    ) {
       missingFields.push('medicalSpecialty');
     }
 
-    if (!doctorProfile.subSpecialization || doctorProfile.subSpecialization.trim().length === 0) {
+    if (
+      !doctorProfile.subSpecialization ||
+      doctorProfile.subSpecialization.trim().length === 0
+    ) {
       missingFields.push('medicalSubSpecialty');
     }
 
@@ -286,26 +411,15 @@ export class DoctorsService {
     const parsed = Number(value);
     return Number.isNaN(parsed) ? undefined : parsed;
   }
-  async findAllForAdmin(
-    query: AdminDoctorsQuery,
-  ): Promise<{
+  async findAllForAdmin(query: AdminDoctorsQuery): Promise<{
     data: AdminDoctorListItem[];
     total: number;
     page: number;
     limit: number;
   }> {
-    const page = Math.max(
-      Number(query.page?.trim()) || 1,
-      1,
-    );
+    const page = Math.max(Number(query.page?.trim()) || 1, 1);
 
-    const limit = Math.min(
-      Math.max(
-        Number(query.limit?.trim()) || 10,
-        1,
-      ),
-      100,
-    );
+    const limit = Math.min(Math.max(Number(query.limit?.trim()) || 10, 1), 100);
 
     const status = query.status?.trim();
     const specialization = query.specialization?.trim();
@@ -323,22 +437,16 @@ export class DoctorsService {
     }
 
     if (specialization) {
-      qb.andWhere(
-        'doctor.specialization ILike :specialization',
-        {
-          specialization: `%${specialization}%`,
-        },
-      );
+      qb.andWhere('doctor.specialization ILike :specialization', {
+        specialization: `%${specialization}%`,
+      });
     }
 
     if (clinicIdValue) {
       const clinicId = Number(clinicIdValue);
 
       if (!Number.isNaN(clinicId)) {
-        qb.innerJoin(
-          'doctor.clinicAssignments',
-          'clinicAssignment',
-        ).andWhere(
+        qb.innerJoin('doctor.clinicAssignments', 'clinicAssignment').andWhere(
           'clinicAssignment.clinicId = :clinicId',
           { clinicId },
         );
@@ -376,8 +484,7 @@ export class DoctorsService {
       );
     }
 
-    qb
-      .orderBy('doctor.id', 'DESC')
+    qb.orderBy('doctor.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
 
@@ -386,8 +493,7 @@ export class DoctorsService {
     const data: AdminDoctorListItem[] = doctors.map((doctor) => {
       const adminDoctor = doctor as AdminDoctorListItem;
 
-      adminDoctor.profileCompletion =
-        this.buildCompletionStatus(doctor);
+      adminDoctor.profileCompletion = this.buildCompletionStatus(doctor);
 
       return adminDoctor;
     });
@@ -518,10 +624,7 @@ export class DoctorsService {
     */
     const patientsWaiting = await this.queueRepository
       .createQueryBuilder('queue')
-      .innerJoin(
-        'queue.appointment',
-        'appointment',
-      )
+      .innerJoin('queue.appointment', 'appointment')
       .where('queue.doctorId = :doctorId', {
         doctorId: doctorProfile.id,
       })
@@ -537,14 +640,8 @@ export class DoctorsService {
       .getCount();
     const upcoming = await this.appointmentRepository
       .createQueryBuilder('appointment')
-      .leftJoinAndSelect(
-        'appointment.patient',
-        'patient',
-      )
-      .leftJoinAndSelect(
-        'patient.user',
-        'patientUser',
-      )
+      .leftJoinAndSelect('appointment.patient', 'patient')
+      .leftJoinAndSelect('patient.user', 'patientUser')
       .where('appointment.doctorId = :doctorId', {
         doctorId: doctorProfile.id,
       })
@@ -608,20 +705,20 @@ export class DoctorsService {
     };
   }
   async updateDoctorStatus(
-  doctorId: number,
-  dto: UpdateDoctorStatusDto,
-): Promise<DoctorProfile> {
-  const doctorProfile = await this.doctorProfileRepository.findOne({
-    where: { id: doctorId },
-    relations: { user: true },
-  });
+    doctorId: number,
+    dto: UpdateDoctorStatusDto,
+  ): Promise<DoctorProfile> {
+    const doctorProfile = await this.doctorProfileRepository.findOne({
+      where: { id: doctorId },
+      relations: { user: true },
+    });
 
-  if (!doctorProfile) {
-    throw new NotFoundException('Doctor profile not found');
+    if (!doctorProfile) {
+      throw new NotFoundException('Doctor profile not found');
+    }
+
+    doctorProfile.status = dto.status;
+
+    return this.doctorProfileRepository.save(doctorProfile);
   }
-
-  doctorProfile.status = dto.status;
-
-  return this.doctorProfileRepository.save(doctorProfile);
-}
 }
