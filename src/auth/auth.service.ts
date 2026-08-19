@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -388,6 +389,14 @@ export class AuthService {
       );
     }
 
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'ACCOUNT_SUSPENDED',
+        message: 'Account is suspended.',
+      });
+    }
+
     if (!user.verificationCode || !user.verificationCodeExpiresAt) {
       throw new UnauthorizedException('Invalid or expired verification code 1');
     }
@@ -403,6 +412,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired verification code 2');
     }
 
+    if (user.status === UserStatus.INACTIVE) {
+      user.status = UserStatus.ACTIVE;
+    }
     user.isVerified = true;
     user.verificationCode = null;
     user.verificationCodeExpiresAt = null;
@@ -735,6 +747,32 @@ export class AuthService {
       if (doctorProfile?.status !== DoctorProfileStatus.ACTIVE) {
         throw new UnauthorizedException('Doctor account is inactive');
       }
+
+      return user;
+    }
+
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'ACCOUNT_SUSPENDED',
+        message: 'Account is suspended.',
+      });
+    }
+
+    if (user.status === UserStatus.INACTIVE) {
+      const { code, expiresAt } = await this.generateVerificationCode();
+      user.verificationCode = code;
+      user.verificationCodeExpiresAt = expiresAt;
+      await this.userRepository.save(user);
+      await this.sendVerificationCode(user, code, {
+        preferEmail: Boolean(normalizedEmail),
+      });
+
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'ACCOUNT_DEACTIVATED',
+        message: 'Account is deactivated. Verification is required.',
+      });
     }
 
     return user;
