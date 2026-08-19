@@ -1,8 +1,9 @@
-
 export enum QueueStatus {
   WAITING = 'waiting',
-  CALLING = 'calling',     // 👈 إضافة الحالة الجديدة هنا
+  CALLING = 'calling',
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
   SKIPPED = 'skipped',
+  EXPIRED = 'expired',
+  NO_SHOW = 'no_show',
 }

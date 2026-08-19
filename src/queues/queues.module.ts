@@ -12,6 +12,7 @@ import { Payment } from '../payments/entities/payment.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { SystemSetting } from '../system-setting/entities/system-setting.entity';
 import { SystemSettingsService } from '../system-setting/system-settings.service';
+import { QueueCronService } from './queue-cron.service';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { SystemSettingsService } from '../system-setting/system-settings.service
     forwardRef(() => AppointmentsModule),
   ],
   controllers: [QueuesController],
-  providers: [QueuesService, ],
+  providers: [QueuesService,QueueCronService ],
   exports: [TypeOrmModule, QueuesService],
 })
 export class QueuesModule { }
