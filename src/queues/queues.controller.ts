@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseIntPipe, Patch, Query, UseGuards, Body } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Patch, Query, UseGuards, Body, NotFoundException } from '@nestjs/common';
 import { AuthRolesGuard, VerifiedGuard } from '../auth/guards';
 import { CurrentUser, Roles } from '../common/decorators';
 import { ActiveUserData, UserRole } from '../utils';
@@ -85,5 +85,23 @@ export class QueuesController {
     @CurrentUser() currentUser: ActiveUserData,
   ): Promise<any> {
     return this.queuesService.getPatientLiveStatus(appointmentId, currentUser);
+  }
+
+   @Get('patient/my-active-queue')
+  @Roles(UserRole.PATIENT)
+  async getPatientActiveQueue(
+    @CurrentUser() currentUser: ActiveUserData,
+  ): Promise<Queue> {
+    const queue = await this.queuesService.getPatientActiveQueue(currentUser);
+    if (!queue) {
+      throw new NotFoundException('لا يوجد طابور نشط لهذا المستخدم حالياً.');
+    }
+    return queue;
+  }
+
+  @Get('admin/metrics')
+  @Roles(UserRole.ADMIN)
+  getQueueMetrics(@Query() query: QueueQueryDto) {
+    return this.queuesService.getQueueMetrics(query);
   }
 }

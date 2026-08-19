@@ -35,6 +35,7 @@ import {
   endOfDay,
   addMinutes,
   minutesDiff,
+  combineDateAndTime,
 } from '../common/utils/date-utils';
 
 @Injectable()
@@ -66,7 +67,7 @@ export class QueuesService {
     @InjectRepository(SystemSetting)
     private readonly systemSettingRepository: Repository<SystemSetting>,
     private readonly eventEmitter: EventEmitter2,
-  ) { }
+  ) {}
 
   // ============================================================
   // 1️⃣ createQueueEntry() - المعدلة
@@ -93,9 +94,13 @@ export class QueuesService {
     const now = nowDate();
     const todayStr = toDateString(now);
 
-    const appointmentTime = new Date(appointment.requestedDate);
-    const appointmentDateStr = toDateString(appointmentTime);
-
+  const appointmentTime = combineDateAndTime(
+  typeof appointment.requestedDate === 'string' 
+    ? appointment.requestedDate 
+    : toDateString(appointment.requestedDate),
+  appointment.startTime,
+);
+const appointmentDateStr = toDateString(appointmentTime);
     if (todayStr !== appointmentDateStr) {
       throw new BadRequestException(
         'Check-in can only be performed on the actual date of the appointment.',
@@ -192,6 +197,7 @@ export class QueuesService {
   // ============================================================
   // 2️⃣ getDoctorLiveQueue() - المعدلة
   // ============================================================
+
   async getDoctorLiveQueue(doctorUserId: number): Promise<Queue[]> {
     const doctorProfile = await this.doctorRepository.findOne({
       where: { userId: doctorUserId },
@@ -204,7 +210,7 @@ export class QueuesService {
     const startOfTodayDate = startOfDay(nowDate());
     const endOfTodayDate = endOfDay(nowDate());
 
-    return await this.queueRepository
+    const queues = await this.queueRepository
       .createQueryBuilder('queue')
       .leftJoinAndSelect('queue.appointment', 'appointment')
       .leftJoinAndSelect('appointment.patient', 'patient')
@@ -224,8 +230,10 @@ export class QueuesService {
       })
       .orderBy('queue.position', 'ASC')
       .getMany();
-  }
 
+    this.markNextPatient(queues);
+    return queues;
+  }
   // ============================================================
   // 3️⃣ startConsultation() - المعدلة
   // ============================================================
@@ -472,7 +480,7 @@ export class QueuesService {
   // ============================================================
   // 6️⃣ getLiveQueueForAdmin() - المعدلة
   // ============================================================
-  async getLiveQueueForAdmin(query: QueueQueryDto): Promise<Queue[]> {
+    async getLiveQueueForAdmin(query: QueueQueryDto): Promise<Queue[]> {
     const startOfTodayDate = startOfDay(nowDate());
     const endOfTodayDate = endOfDay(nowDate());
 
@@ -495,9 +503,10 @@ export class QueuesService {
       qb.andWhere('queue.doctorId = :doctorId', { doctorId: query.doctorId });
     }
 
-    return await qb.orderBy('queue.position', 'ASC').getMany();
+    const queues = await qb.orderBy('queue.position', 'ASC').getMany();
+    this.markNextPatient(queues);
+    return queues;
   }
-
   // ============================================================
   // 7️⃣ skipPatient() - بدون تعديل (لا يستخدم تواريخ)
   // ============================================================
@@ -580,6 +589,83 @@ export class QueuesService {
   // ============================================================
   // 9️⃣ getPatientLiveStatus() - المعدلة
   // ============================================================
+  private calculatePatientQueueDelay(queue: Queue): number {
+    if (!queue.appointment?.requestedDate || !queue.checkinTime) return 0;
+
+    // تحويل requestedDate إلى string إذا كان من نوع Date
+    const requestedDateStr = typeof queue.appointment.requestedDate === 'string'
+        ? queue.appointment.requestedDate
+        : toDateString(queue.appointment.requestedDate);
+
+    const scheduled = combineDateAndTime(
+        requestedDateStr,
+        queue.appointment.startTime,
+    );
+
+    return Math.max(
+        0,
+        Math.floor((queue.checkinTime.getTime() - scheduled.getTime()) / 60000),
+    );
+}
+
+  async getPatientActiveQueue(
+    currentUser: ActiveUserData,
+): Promise<Queue | null> {
+    const start = startOfDay(nowDate());
+    const end = endOfDay(nowDate());
+    const queue = await this.queueRepository
+        .createQueryBuilder('queue')
+        .leftJoinAndSelect('queue.appointment', 'appointment')
+        .leftJoinAndSelect('appointment.patient', 'patient')
+        .leftJoinAndSelect('patient.user', 'patientUser')
+        .leftJoinAndSelect('queue.doctor', 'doctor')
+        .leftJoinAndSelect('doctor.user', 'doctorUser')
+        .leftJoinAndSelect('queue.clinic', 'clinic')
+        .where('patient.userId = :userId', { userId: currentUser.sub })
+        .andWhere('queue.status IN (:...statuses)', {
+            statuses: [
+                QueueStatus.WAITING,
+                QueueStatus.CALLING,
+                QueueStatus.IN_PROGRESS,
+            ],
+        })
+        .andWhere('queue.checkinTime BETWEEN :start AND :end', { start, end })
+        .orderBy('queue.checkinTime', 'DESC')
+        .getOne();
+
+    if (!queue) return null;
+
+    const settings = await this.systemSettingRepository.findOne({
+        where: { id: 1 },
+    });
+    const duration =
+        Number((queue.doctor as any)?.averageConsultationTime) ||
+        settings?.defaultDuration ||
+        15;
+    queue.estimatedWaitMinutes = Math.max(
+        queue.estimatedWaitMinutes || 0,
+        queue.position * duration,
+    );
+
+    // ✅ تحويل requestedDate إلى string إذا كان من نوع Date
+    const requestedDateStr = typeof queue.appointment.requestedDate === 'string'
+        ? queue.appointment.requestedDate
+        : toDateString(queue.appointment.requestedDate);
+
+    const scheduled = combineDateAndTime(
+        requestedDateStr,
+        queue.appointment.startTime,
+    );
+
+    (queue as any).delay_from_appointment_minutes = queue.checkinTime
+        ? Math.max(
+            0,
+            Math.floor((queue.checkinTime.getTime() - scheduled.getTime()) / 60000),
+        )
+        : 0;
+
+    return queue;
+}
   async getPatientLiveStatus(
     appointmentId: number,
     currentUser: ActiveUserData,
@@ -675,6 +761,7 @@ export class QueuesService {
       currentPosition: queue.position,
       patientsAhead: patientsAhead.length,
       estimatedWaitMinutes: Math.round(estimatedWaitMinutes),
+      delay_from_appointment_minutes: this.calculatePatientQueueDelay(queue),
     };
   }
 
@@ -826,5 +913,84 @@ export class QueuesService {
     }
 
     return totalDelay;
+  }
+
+    // ============================================================
+  // تحديد المريض التالي ضمن قائمة مرتبة (يُستدعى بعد أي getMany على الطابور)
+  // ============================================================
+  private markNextPatient(queues: Queue[]): void {
+    const nextWaiting = queues
+      .filter((q) => q.status === QueueStatus.WAITING)
+      .sort((a, b) => a.position - b.position)[0];
+
+    if (nextWaiting) {
+      nextWaiting.isNext = true;
+    }
+  }
+
+    // ============================================================
+  // getQueueMetrics() - إحصائيات حية للطابور
+  // ============================================================
+  async getQueueMetrics(query: QueueQueryDto): Promise<{
+    totalCheckedIn: number;
+    completedCount: number;
+    waitingCount: number;
+    avgConsultationTime: number;
+    avgWaitTime: number;
+  }> {
+    const startOfTodayDate = startOfDay(nowDate());
+    const endOfTodayDate = endOfDay(nowDate());
+
+    const baseQb = () => {
+      const qb = this.queueRepository
+        .createQueryBuilder('queue')
+        .where('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
+          startOfToday: startOfTodayDate,
+          endOfToday: endOfTodayDate,
+        });
+
+      if (query.clinicId) {
+        qb.andWhere('queue.clinicId = :clinicId', { clinicId: query.clinicId });
+      }
+      if (query.doctorId) {
+        qb.andWhere('queue.doctorId = :doctorId', { doctorId: query.doctorId });
+      }
+      return qb;
+    };
+
+    const totalCheckedIn = await baseQb().getCount();
+
+    const completedCount = await baseQb()
+      .andWhere('queue.status = :status', { status: QueueStatus.COMPLETED })
+      .getCount();
+
+    const waitingCount = await baseQb()
+      .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
+      .getCount();
+
+    const avgConsultationRaw = await baseQb()
+      .andWhere('queue.status = :status', { status: QueueStatus.COMPLETED })
+      .andWhere('queue.actual_duration_minutes IS NOT NULL')
+      .select('AVG(queue.actual_duration_minutes)', 'avg')
+      .getRawOne();
+
+    const avgWaitRaw = await baseQb()
+      .andWhere('queue.started_time IS NOT NULL')
+      .andWhere('queue.checkin_time IS NOT NULL')
+      .select(
+        'AVG(EXTRACT(EPOCH FROM (queue.started_time - queue.checkin_time)) / 60)',
+        'avg',
+      )
+      .getRawOne();
+
+    return {
+      totalCheckedIn,
+      completedCount,
+      waitingCount,
+      avgConsultationTime: avgConsultationRaw?.avg
+        ? Math.round(Number(avgConsultationRaw.avg))
+        : 0,
+      avgWaitTime: avgWaitRaw?.avg ? Math.round(Number(avgWaitRaw.avg)) : 0,
+    };
   }
 }

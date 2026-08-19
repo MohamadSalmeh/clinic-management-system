@@ -62,9 +62,9 @@ export function minutesDiff(date1: Date, date2: Date): number {
 /**
  * إنشاء Date من تاريخ ووقت (مثل "2026-06-27" و "14:30:00")
  */
-export function combineDateAndTime(date: string, time: string): Date {
+export function combineDateAndTime(date: string, time: string | null | undefined): Date {
   const [year, month, day] = date.split('-').map(Number);
-  const [hours, minutes, seconds] = time.split(':').map(Number);
+  const [hours, minutes, seconds] = (time ?? '00:00:00').split(':').map(Number);
   return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
 }
 
