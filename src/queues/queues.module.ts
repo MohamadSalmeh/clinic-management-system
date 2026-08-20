@@ -12,8 +12,8 @@ import { Payment } from '../payments/entities/payment.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { SystemSetting } from '../system-setting/entities/system-setting.entity';
 import { SystemSettingsService } from '../system-setting/system-settings.service';
-import { QueueCronService } from './queue-cron.service';
-
+import { DoctorSchedule } from '../doctor-schedules/entities/doctor-schedule.entity';
+import { QueueTimeoutService } from './queue-timeout.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -23,13 +23,14 @@ import { QueueCronService } from './queue-cron.service';
       DoctorProfile,
       Wallet,
       Payment,
-      SystemSetting
+      SystemSetting,
+      DoctorSchedule,
     ]),
-    AuthModule, // تم إضافته هنا ليوفر الـ JwtService وكل مستلزمات الـ Guards لـ الـ Controller
+    AuthModule,
     forwardRef(() => AppointmentsModule),
   ],
   controllers: [QueuesController],
-  providers: [QueuesService,QueueCronService ],
+  providers: [QueuesService,QueueTimeoutService],
   exports: [TypeOrmModule, QueuesService],
 })
-export class QueuesModule { }
+export class QueuesModule {}

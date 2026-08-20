@@ -15,7 +15,7 @@ import { Clinic } from '../clinics/entities/clinic.entity';
 import { DoctorProfile } from '../doctors/entities/doctor-profile.entity';
 import { QueueQueryDto } from './dto/queue-query.dto';
 import { AppointmentsService } from '../appointments/appointments.service';
-import { ActiveUserData } from '../utils';
+import { ActiveUserData, UserRole } from '../utils';
 import { QueueStatus } from './enums/queue-status.enum';
 import { Payment } from '../payments/entities/payment.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
@@ -37,6 +37,10 @@ import {
   minutesDiff,
   combineDateAndTime,
 } from '../common/utils/date-utils';
+import { QueuePriorityGroup } from './enums/queue-priority-group.enum';
+import { DoctorSchedule, DoctorScheduleType } from '../doctor-schedules/entities/doctor-schedule.entity';
+import { QueueResponseDto } from './dto/queue-response.dto';
+import { PatientProfile } from '../patients/entities/patient-profile.entity';
 
 @Injectable()
 export class QueuesService {
@@ -67,8 +71,70 @@ export class QueuesService {
     @InjectRepository(SystemSetting)
     private readonly systemSettingRepository: Repository<SystemSetting>,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
 
+    @InjectRepository(DoctorSchedule)
+    private readonly doctorScheduleRepository: Repository<DoctorSchedule>,
+  ) { }
+  async toQueueResponseDto(queue: Queue): Promise<QueueResponseDto> {
+    const isTerminal =
+      queue.status === QueueStatus.COMPLETED ||
+      queue.status === QueueStatus.SKIPPED;
+
+    let currentPosition: number | null = null;
+    let patientsAhead: number | null = null;
+    let expectedWaitingTimeMinutes: number | null = null;
+
+    if (!isTerminal) {
+      currentPosition =
+        await this.calculateDynamicCurrentPosition(queue);
+
+      patientsAhead =
+        currentPosition === null
+          ? null
+          : Math.max(currentPosition - 1, 0);
+
+      expectedWaitingTimeMinutes =
+        currentPosition === null
+          ? null
+          : await this.calculateDynamicEstimatedWaitMinutes(queue);
+    }
+
+    const response = new QueueResponseDto();
+
+    response.id = queue.id;
+    response.appointmentId = queue.appointmentId;
+    response.clinicId = queue.clinicId;
+    response.doctorId = queue.doctorId;
+
+    response.currentPosition = currentPosition;
+    response.patientsAhead = patientsAhead;
+
+    response.priorityGroup = queue.priorityGroup;
+    response.status = queue.status;
+
+    response.checkInAt = queue.checkinTime;
+    response.calledAt = queue.calledAt;
+    response.consultationStartedAt = queue.startedTime;
+    response.completedAt = queue.finishedTime;
+    response.skippedAt = queue.skippedAt;
+
+    response.expectedWaitingTimeMinutes =
+      expectedWaitingTimeMinutes;
+
+    response.patientDelayMinutes =
+      this.calculatePatientQueueDelay(queue);
+
+    response.actualConsultationDurationMinutes =
+      queue.status === QueueStatus.COMPLETED
+        ? queue.actualDurationMinutes
+        : null;
+
+    response.clinic = queue.clinic;
+    response.doctor = queue.doctor;
+    response.appointment = queue.appointment;
+
+    return response;
+  }
   // ============================================================
   // 1️⃣ createQueueEntry() - المعدلة
   // ============================================================
@@ -94,13 +160,13 @@ export class QueuesService {
     const now = nowDate();
     const todayStr = toDateString(now);
 
-  const appointmentTime = combineDateAndTime(
-  typeof appointment.requestedDate === 'string' 
-    ? appointment.requestedDate 
-    : toDateString(appointment.requestedDate),
-  appointment.startTime,
-);
-const appointmentDateStr = toDateString(appointmentTime);
+    const appointmentTime = combineDateAndTime(
+      typeof appointment.requestedDate === 'string'
+        ? appointment.requestedDate
+        : toDateString(appointment.requestedDate),
+      appointment.startTime,
+    );
+    const appointmentDateStr = toDateString(appointmentTime);
     if (todayStr !== appointmentDateStr) {
       throw new BadRequestException(
         'Check-in can only be performed on the actual date of the appointment.',
@@ -111,7 +177,7 @@ const appointmentDateStr = toDateString(appointmentTime);
       where: { id: 1 },
     });
 
-    const totalDelay = await this.calculateTotalDelayForDoctor(
+    /*const totalDelay = await this.calculateTotalDelayForDoctor(
       appointment.doctorId,
       appointment.clinicId,
     );
@@ -134,7 +200,28 @@ const appointmentDateStr = toDateString(appointmentTime);
         `لا يمكن تفعيل الدور حالياً. يُسمح بعمل Check-in فقط قبل موعد الحجز الفعلي بـ ${timeText} كحد أقصى.`,
       );
     }
+*/
+    const minimumCheckinTime = addMinutes(appointmentTime, -60);
 
+    if (now < minimumCheckinTime) {
+      throw new BadRequestException(
+        'لا يمكن عمل Check-in قبل ساعة واحدة من موعد الحجز.',
+      );
+    }
+    const doctorDelay = await this.calculateTotalDelayForDoctor(
+      appointment.doctorId,
+      appointment.clinicId,
+    );
+
+    const normalCheckinDeadline = addMinutes(
+      appointmentTime,
+      doctorDelay,
+    );
+
+    const priorityGroup =
+      now <= normalCheckinDeadline
+        ? QueuePriorityGroup.NORMAL
+        : QueuePriorityGroup.LATE;
     const existingQueue = await this.queueRepository.findOne({
       where: { appointmentId },
     });
@@ -151,7 +238,7 @@ const appointmentDateStr = toDateString(appointmentTime);
       appointment.checkinTime = nowDate();
       await transactionalAppointmentRepo.save(appointment);
 
-      const startOfTodayDate = startOfDay(nowDate());
+      /*const startOfTodayDate = startOfDay(nowDate());
       const endOfTodayDate = endOfDay(nowDate());
 
       const maxPositionResult = await transactionalQueueRepo
@@ -173,14 +260,14 @@ const appointmentDateStr = toDateString(appointmentTime);
         maxPositionResult && maxPositionResult.max
           ? Number(maxPositionResult.max) + 1
           : 1;
-
-      const estimatedWaitMinutes = await this.calculateEstimatedWaitMinutes(
+*/
+      /*const estimatedWaitMinutes = await this.calculateEstimatedWaitMinutes(
         appointment.clinicId,
         appointment.doctorId,
-      );
-      const isPriority = appointment.priority === '2';
+      );*/
+      //const isPriority = appointment.priority === '2';
 
-      const queueEntry = transactionalQueueRepo.create({
+      /*const queueEntry = transactionalQueueRepo.create({
         appointmentId: appointment.id,
         clinicId: appointment.clinicId,
         doctorId: appointment.doctorId,
@@ -190,8 +277,103 @@ const appointmentDateStr = toDateString(appointmentTime);
         checkinTime: nowDate(),
         isPriority,
       });
+      */
+      const queueEntry = transactionalQueueRepo.create({
+        appointmentId: appointment.id,
+        clinicId: appointment.clinicId,
+        doctorId: appointment.doctorId,
+        status: QueueStatus.WAITING,
+        checkinTime: nowDate(),
+        priorityGroup,
+      });
       return await transactionalQueueRepo.save(queueEntry);
     });
+  }
+  private async getTodayDoctorSchedule(
+    doctorProfileId: number,
+    clinicId: number,
+    date: Date,
+  ): Promise<DoctorSchedule | null> {
+    const schedules = await this.doctorScheduleRepository.find({
+      where: {
+        doctorProfileId,
+        clinicId,
+        dayOfWeek: date.getDay(),
+        isActive: true,
+      },
+      order: {
+        startTime: 'ASC',
+      },
+    });
+
+    return (
+      schedules.find(
+        (schedule) => schedule.type === DoctorScheduleType.NORMAL,
+      ) ?? null
+    );
+  }
+  private async calculateInitialOpeningDelay(
+    doctorProfileId: number,
+    clinicId: number,
+    date: Date,
+  ): Promise<number> {
+    const schedule = await this.getTodayDoctorSchedule(
+      doctorProfileId,
+      clinicId,
+      date,
+    );
+
+    if (!schedule) {
+      return 0;
+    }
+
+    const scheduleStart = combineDateAndTime(
+      toDateString(date),
+      schedule.startTime,
+    );
+
+    const consultations = await this.queueRepository
+      .createQueryBuilder('queue')
+      .leftJoinAndSelect('queue.appointment', 'appointment')
+      .where('queue.doctorId = :doctorId', {
+        doctorId: doctorProfileId,
+      })
+      .andWhere('queue.clinicId = :clinicId', {
+        clinicId,
+      })
+      .andWhere('queue.status IN (:...statuses)', {
+        statuses: [
+          QueueStatus.IN_PROGRESS,
+          QueueStatus.COMPLETED,
+        ],
+      })
+      .andWhere('queue.created_at BETWEEN :start AND :end', {
+        start: startOfDay(date),
+        end: endOfDay(date),
+      })
+      .andWhere('queue.started_time IS NOT NULL')
+      .orderBy('queue.started_time', 'ASC')
+      .getMany();
+
+    const firstConsultation = consultations.find((queue) => {
+      if (!queue.appointment?.requestedDate) {
+        return false;
+      }
+
+      return (
+        toDateString(queue.appointment.requestedDate) ===
+        toDateString(date)
+      );
+    });
+
+    if (!firstConsultation?.startedTime) {
+      return 0;
+    }
+
+    return Math.max(
+      minutesDiff(firstConsultation.startedTime, scheduleStart),
+      0,
+    );
   }
 
   // ============================================================
@@ -207,13 +389,39 @@ const appointmentDateStr = toDateString(appointmentTime);
       throw new NotFoundException('Doctor profile not found.');
     }
 
-    const startOfTodayDate = startOfDay(nowDate());
-    const endOfTodayDate = endOfDay(nowDate());
+    const today = toDateString(nowDate());
 
     const queues = await this.queueRepository
       .createQueryBuilder('queue')
       .leftJoinAndSelect('queue.appointment', 'appointment')
       .leftJoinAndSelect('appointment.patient', 'patient')
+      .leftJoinAndSelect('patient.user', 'patientUser')
+      .leftJoinAndSelect('queue.clinic', 'clinic')
+      .where('queue.doctor_id = :doctorId', {
+        doctorId: doctorProfile.id,
+      })
+      .andWhere('appointment.requested_date = :today', {
+        today,
+      })
+      .andWhere('queue.status IN (:...statuses)', {
+        statuses: [
+          QueueStatus.WAITING,
+          QueueStatus.CALLING,
+          QueueStatus.IN_PROGRESS,
+        ],
+      })
+      .getMany();
+
+    /*const queues = await this.queueRepository
+      .createQueryBuilder('queue')
+      .leftJoinAndSelect('queue.appointment', 'appointment')
+      .leftJoinAndSelect('appointment.patient', 'patient')
+      .andWhere(
+        `appointment.requestedDate = :scheduledDate`,
+        {
+          scheduledDate: toDateString(nowDate()),
+        },
+      )
       .leftJoinAndSelect('patient.user', 'patientUser')
       .leftJoinAndSelect('queue.clinic', 'clinic')
       .where('queue.doctor_id = :doctorId', { doctorId: doctorProfile.id })
@@ -224,15 +432,13 @@ const appointmentDateStr = toDateString(appointmentTime);
           QueueStatus.IN_PROGRESS,
         ],
       })
-      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
-        startOfToday: startOfTodayDate,
-        endOfToday: endOfTodayDate,
-      })
-      .orderBy('queue.position', 'ASC')
-      .getMany();
+      .getMany();*/
 
-    this.markNextPatient(queues);
-    return queues;
+    const orderedQueues = this.sortQueueEntries(queues);
+
+
+
+    return orderedQueues;
   }
   // ============================================================
   // 3️⃣ startConsultation() - المعدلة
@@ -244,59 +450,82 @@ const appointmentDateStr = toDateString(appointmentTime);
     const doctorProfile = await this.doctorRepository.findOne({
       where: { userId: currentUser.sub },
     });
+
     if (!doctorProfile) {
       throw new NotFoundException('Doctor profile not found.');
     }
 
-    const queue = await this.queueRepository.findOne({
-      where: { id: queueId },
-      relations: { appointment: true },
-    });
-    if (!queue) {
-      throw new NotFoundException('Queue entry not found.');
-    }
-
-    if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
-      throw new ForbiddenException(
-        'You do not have permission to start this consultation.',
-      );
-    }
-
-    if (queue.status !== QueueStatus.CALLING) {
-      throw new BadRequestException(
-        'Consultation can only be started for patients in CALLING status.',
-      );
-    }
-
-    const activeConsultation = await this.queueRepository.findOne({
-      where: {
-        doctorId: doctorProfile.id,
-        status: QueueStatus.IN_PROGRESS,
-      },
-    });
-    if (activeConsultation) {
-      throw new BadRequestException(
-        'You already have an active consultation. Please complete or skip it first.',
-      );
-    }
-
-    return await this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const transactionalQueueRepo = manager.getRepository(Queue);
-      const transactionalAppointmentRepo = manager.getRepository(Appointment);
+      const transactionalAppointmentRepo =
+        manager.getRepository(Appointment);
+
+      const queue = await transactionalQueueRepo
+        .createQueryBuilder('queue')
+        .setLock('pessimistic_write')
+        .where('queue.id = :queueId', { queueId })
+        .getOne();
+
+      if (!queue) {
+        throw new NotFoundException('Queue entry not found.');
+      }
+      const appointment = await transactionalAppointmentRepo.findOne({
+        where: { id: queue.appointmentId },
+      });
+      if (!appointment) {
+        throw new NotFoundException('Appointment not found.');
+      }
+
+      if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
+        throw new ForbiddenException(
+          'You do not have permission to start this consultation.',
+        );
+      }
+
+      if (queue.status !== QueueStatus.CALLING) {
+        throw new BadRequestException(
+          'Consultation can only be started for patients in CALLING status.',
+        );
+      }
+
+      const activeConsultation = await transactionalQueueRepo.findOne({
+        where: {
+          doctorId: doctorProfile.id,
+          status: QueueStatus.IN_PROGRESS,
+        },
+      });
+
+      if (activeConsultation) {
+        throw new BadRequestException(
+          'You already have an active consultation. Please complete or skip it first.',
+        );
+      }
 
       const currentTime = nowDate();
 
       queue.status = QueueStatus.IN_PROGRESS;
       queue.startedTime = currentTime;
 
-      if (queue.appointment) {
-        //queue.appointment.status = 'in_progress';
-        queue.appointment.actualStartTime = currentTime;
-        await transactionalAppointmentRepo.save(queue.appointment);
-      }
+      appointment.actualStartTime = currentTime;
+      await transactionalAppointmentRepo.save(appointment);
 
-      return await transactionalQueueRepo.save(queue);
+      return transactionalQueueRepo.save(queue);
     });
+    const updatedQueue = await this.queueRepository.findOne({
+      where: { id: result.id },
+      relations: {
+        appointment: true,
+        clinic: true,
+        doctor: true,
+      },
+    });
+
+    if (!updatedQueue) {
+      throw new NotFoundException('Queue entry not found after update.');
+    }
+
+    return updatedQueue;
+
   }
 
   // ============================================================
@@ -314,42 +543,93 @@ const appointmentDateStr = toDateString(appointmentTime);
       throw new NotFoundException('Doctor profile not found.');
     }
 
-    const todayStr = toDateString(nowDate());
+    const updatedQueue = await this.dataSource.transaction(async (manager) => {
+      const transactionalQueueRepo = manager.getRepository(Queue);
 
-    const activeSession = await this.queueRepository
-      .createQueryBuilder('queue')
-      .where('queue.doctorId = :doctorId', { doctorId: doctorProfile.id })
-      .andWhere('queue.clinicId = :clinicId', { clinicId })
-      .andWhere('queue.status IN (:...statuses)', {
-        statuses: [QueueStatus.IN_PROGRESS, QueueStatus.CALLING],
-      })
-      .andWhere('CAST(queue.created_at AS DATE) = :today', { today: todayStr })
-      .getOne();
+      // Lock any current active session for this doctor/clinic.
+      const activeSession = await transactionalQueueRepo
+        .createQueryBuilder('queue')
+        .setLock('pessimistic_write')
+        .where('queue.doctor_id = :doctorId', {
+          doctorId: doctorProfile.id,
+        })
+        .andWhere('queue.clinic_id = :clinicId', {
+          clinicId,
+        })
+        .andWhere('queue.status IN (:...statuses)', {
+          statuses: [
+            QueueStatus.IN_PROGRESS,
+            QueueStatus.CALLING,
+          ],
+        })
+        .andWhere('CAST(queue.created_at AS DATE) = :today', {
+          today: toDateString(nowDate()),
+        })
+        .getOne();
 
-    if (activeSession) {
-      throw new BadRequestException(
-        'لديك مريض داخل غرفة المعاينة أو قيد الاستدعاء حالياً، يرجى إنهاء الجلسة الحالية أولاً.',
-      );
-    }
+      if (activeSession) {
+        throw new BadRequestException(
+          'لديك مريض داخل غرفة المعاينة أو قيد الاستدعاء حالياً، يرجى إنهاء الجلسة الحالية أولاً.',
+        );
+      }
 
-    const nextQueueEntry = await this.queueRepository
-      .createQueryBuilder('queue')
-      .leftJoinAndSelect('queue.appointment', 'appointment')
-      .leftJoinAndSelect('appointment.patient', 'patient')
-      .leftJoinAndSelect('queue.clinic', 'clinic')
-      .where('queue.doctorId = :doctorId', { doctorId: doctorProfile.id })
-      .andWhere('queue.clinicId = :clinicId', { clinicId })
-      .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
-      .andWhere('CAST(queue.created_at AS DATE) = :today', { today: todayStr })
-      .orderBy('queue.position', 'ASC')
-      .getOne();
+      // Get all waiting patients in the lane.
+      const waitingQueues = await transactionalQueueRepo
+        .createQueryBuilder('queue')
+        .leftJoinAndSelect('queue.appointment', 'appointment')
+        .leftJoinAndSelect('appointment.patient', 'patient')
+        .leftJoinAndSelect('queue.clinic', 'clinic')
+        .where('queue.doctor_id = :doctorId', {
+          doctorId: doctorProfile.id,
+        })
+        .andWhere('queue.clinic_id = :clinicId', {
+          clinicId,
+        })
+        .andWhere('queue.status = :status', {
+          status: QueueStatus.WAITING,
+        })
+        .andWhere('CAST(queue.created_at AS DATE) = :today', {
+          today: toDateString(nowDate()),
+        })
+        .getMany();
 
-    if (!nextQueueEntry) {
-      throw new NotFoundException('لا يوجد مرضى في قائمة الانتظار لهذا اليوم.');
-    }
+      const orderedWaitingQueues = this.sortQueueEntries(waitingQueues);
 
-    nextQueueEntry.status = QueueStatus.CALLING;
-    const updatedQueue = await this.queueRepository.save(nextQueueEntry);
+      const nextQueueEntry = orderedWaitingQueues[0];
+
+      if (!nextQueueEntry) {
+        throw new NotFoundException(
+          'لا يوجد مرضى في قائمة الانتظار لهذا اليوم.',
+        );
+      }
+
+      // Lock the selected patient row before changing its state.
+      await transactionalQueueRepo
+        .createQueryBuilder()
+        .update(Queue)
+        .set({
+          status: QueueStatus.CALLING,
+          calledAt: nowDate(),
+        })
+        .where('id = :id', { id: nextQueueEntry.id })
+        .execute();
+
+      const result = await transactionalQueueRepo
+        .createQueryBuilder('queue')
+        .leftJoinAndSelect('queue.appointment', 'appointment')
+        .leftJoinAndSelect('appointment.patient', 'patient')
+        .leftJoinAndSelect('queue.clinic', 'clinic')
+        .where('queue.id = :id', {
+          id: nextQueueEntry.id,
+        })
+        .getOne();
+
+      if (!result) {
+        throw new NotFoundException('Queue entry not found after calling.');
+      }
+
+      return result;
+    });
 
     if (updatedQueue.appointment?.patient?.userId) {
       await this.eventEmitter.emitAsync(
@@ -452,12 +732,12 @@ const appointmentDateStr = toDateString(appointmentTime);
         }
       }
 
-      await this.updateRemainingPatientsWaitTime(
+      /*await this.updateRemainingPatientsWaitTime(
         queue.doctorId,
         queue.clinicId,
         queue.appointment?.type,
         actualDurationMinutes,
-      );
+      );*/
 
       return await transactionalQueueRepo.save(queue);
     });
@@ -480,9 +760,8 @@ const appointmentDateStr = toDateString(appointmentTime);
   // ============================================================
   // 6️⃣ getLiveQueueForAdmin() - المعدلة
   // ============================================================
-    async getLiveQueueForAdmin(query: QueueQueryDto): Promise<Queue[]> {
-    const startOfTodayDate = startOfDay(nowDate());
-    const endOfTodayDate = endOfDay(nowDate());
+  async getLiveQueueForAdmin(query: QueueQueryDto): Promise<Queue[]> {
+    const today = toDateString(nowDate());
 
     const qb = this.queueRepository
       .createQueryBuilder('queue')
@@ -490,22 +769,37 @@ const appointmentDateStr = toDateString(appointmentTime);
       .leftJoinAndSelect('appointment.patient', 'patient')
       .leftJoinAndSelect('patient.user', 'patientUser')
       .leftJoinAndSelect('queue.clinic', 'clinic')
-      .where('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
-        startOfToday: startOfTodayDate,
-        endOfToday: endOfTodayDate,
+      .leftJoinAndSelect('queue.doctor', 'doctor')
+      .where('appointment.requested_date = :today', {
+        today,
+      })
+      .andWhere('queue.status IN (:...statuses)', {
+        statuses: [
+          QueueStatus.WAITING,
+          QueueStatus.CALLING,
+          QueueStatus.IN_PROGRESS,
+        ],
       });
 
     if (query.clinicId) {
-      qb.andWhere('queue.clinicId = :clinicId', { clinicId: query.clinicId });
+      qb.andWhere('queue.clinic_id = :clinicId', {
+        clinicId: query.clinicId,
+      });
     }
 
     if (query.doctorId) {
-      qb.andWhere('queue.doctorId = :doctorId', { doctorId: query.doctorId });
+      qb.andWhere('queue.doctor_id = :doctorId', {
+        doctorId: query.doctorId,
+      });
     }
 
-    const queues = await qb.orderBy('queue.position', 'ASC').getMany();
-    this.markNextPatient(queues);
-    return queues;
+    const queues = await qb.getMany();
+
+    const orderedQueues = this.sortQueueEntries(queues);
+
+
+
+    return orderedQueues;
   }
   // ============================================================
   // 7️⃣ skipPatient() - بدون تعديل (لا يستخدم تواريخ)
@@ -514,26 +808,79 @@ const appointmentDateStr = toDateString(appointmentTime);
     queueId: number,
     currentUser: ActiveUserData,
   ): Promise<Queue> {
-    const queue = await this.queueRepository.findOne({
-      where: { id: queueId },
-      relations: { appointment: { patient: true }, clinic: true },
+    const updatedQueue = await this.dataSource.transaction(async (manager) => {
+      const transactionalQueueRepo = manager.getRepository(Queue);
+      const transactionalAppointmentRepo =
+        manager.getRepository(Appointment);
+      const transactionalPatientRepo =
+        manager.getRepository(PatientProfile);
+      const transactionalClinicRepo =
+        manager.getRepository(Clinic);
+
+      // 1. Lock Queue row only
+      const queue = await transactionalQueueRepo
+        .createQueryBuilder('queue')
+        .setLock('pessimistic_write')
+        .where('queue.id = :queueId', { queueId })
+        .getOne();
+
+      if (!queue) {
+        throw new NotFoundException('Queue entry not found.');
+      }
+
+      // 2. Doctor ownership check
+      if (currentUser.usertype?.toLowerCase() === UserRole.DOCTOR) {
+        const doctorProfile = await this.doctorRepository.findOne({
+          where: { userId: currentUser.sub },
+        });
+
+        if (!doctorProfile) {
+          throw new NotFoundException('Doctor profile not found.');
+        }
+
+        if (Number(queue.doctorId) !== Number(doctorProfile.id)) {
+          throw new ForbiddenException(
+            'You do not have permission to skip this queue entry.',
+          );
+        }
+      }
+
+      // 3. Only CALLING can be skipped
+      if (queue.status !== QueueStatus.CALLING) {
+        throw new BadRequestException(
+          'Only a patient in CALLING status can be skipped.',
+        );
+      }
+
+      // 4. Update lifecycle
+      queue.status = QueueStatus.SKIPPED;
+      queue.skippedAt = nowDate();
+
+      await transactionalQueueRepo.save(queue);
+
+      // 5. Load required relations after the lock
+      const appointment = await transactionalAppointmentRepo.findOne({
+        where: { id: queue.appointmentId },
+      });
+
+      if (!appointment) {
+        throw new NotFoundException('Appointment not found.');
+      }
+
+      const patient = await transactionalPatientRepo.findOne({
+        where: { id: appointment.patientId },
+      });
+
+      const clinic = await transactionalClinicRepo.findOne({
+        where: { id: queue.clinicId },
+      });
+
+      queue.appointment = appointment;
+      queue.appointment.patient = patient!;
+      queue.clinic = clinic!;
+
+      return queue;
     });
-
-    if (!queue) {
-      throw new NotFoundException('Queue entry not found.');
-    }
-
-    if (
-      queue.status !== QueueStatus.WAITING &&
-      queue.status !== QueueStatus.CALLING
-    ) {
-      throw new BadRequestException(
-        'Cannot skip a patient who is not currently waiting or being called.',
-      );
-    }
-
-    queue.status = QueueStatus.SKIPPED;
-    const updatedQueue = await this.queueRepository.save(queue);
 
     if (updatedQueue.appointment?.patient?.userId) {
       await this.eventEmitter.emitAsync(
@@ -542,7 +889,7 @@ const appointmentDateStr = toDateString(appointmentTime);
           userId: updatedQueue.appointment.patient.userId,
           appointmentId: updatedQueue.appointment.id,
           queueId: updatedQueue.id,
-          clinicName: queue.clinic?.name ?? null,
+          clinicName: updatedQueue.clinic?.name ?? null,
         }),
       );
     }
@@ -553,126 +900,226 @@ const appointmentDateStr = toDateString(appointmentTime);
   // ============================================================
   // 8️⃣ reorderQueue() - المعدلة
   // ============================================================
-  async reorderQueue(queueId: number, newPosition: number): Promise<Queue> {
-    const queue = await this.queueRepository.findOne({
-      where: { id: queueId },
-    });
 
-    if (!queue) {
-      throw new NotFoundException('Queue entry not found.');
-    }
-
-    const startOfTodayDate = startOfDay(nowDate());
-    const endOfTodayDate = endOfDay(nowDate());
-
-    return await this.dataSource.transaction(async (manager) => {
-      const transactionalQueueRepo = manager.getRepository(Queue);
-
-      await transactionalQueueRepo
-        .createQueryBuilder('queue')
-        .update(Queue)
-        .set({ position: () => 'position + 1' })
-        .where('doctorId = :doctorId', { doctorId: queue.doctorId })
-        .andWhere('clinicId = :clinicId', { clinicId: queue.clinicId })
-        .andWhere('position >= :newPosition', { newPosition })
-        .andWhere('created_at BETWEEN :startOfToday AND :endOfToday', {
-          startOfToday: startOfTodayDate,
-          endOfToday: endOfTodayDate,
-        })
-        .execute();
-
-      queue.position = newPosition;
-      return await transactionalQueueRepo.save(queue);
-    });
-  }
 
   // ============================================================
   // 9️⃣ getPatientLiveStatus() - المعدلة
   // ============================================================
-  private calculatePatientQueueDelay(queue: Queue): number {
-    if (!queue.appointment?.requestedDate || !queue.checkinTime) return 0;
+  private calculatePatientQueueDelay(queue: Queue): number | null {
+    if (!queue.appointment?.requestedDate) {
+      return null;
+    }
 
-    // تحويل requestedDate إلى string إذا كان من نوع Date
-    const requestedDateStr = typeof queue.appointment.requestedDate === 'string'
-        ? queue.appointment.requestedDate
-        : toDateString(queue.appointment.requestedDate);
+    if (
+      queue.status !== QueueStatus.WAITING &&
+      queue.status !== QueueStatus.CALLING
+    ) {
+      return null;
+    }
 
     const scheduled = combineDateAndTime(
-        requestedDateStr,
-        queue.appointment.startTime,
+      toDateString(queue.appointment.requestedDate),
+      queue.appointment.startTime,
     );
 
     return Math.max(
-        0,
-        Math.floor((queue.checkinTime.getTime() - scheduled.getTime()) / 60000),
+      0,
+      Math.floor(
+        (nowDate().getTime() - scheduled.getTime()) / 60000,
+      ),
     );
-}
+  }
+  private async calculateDynamicCurrentPosition(
+    queue: Queue,
+  ): Promise<number | null> {
+    const today = toDateString(nowDate());
+
+    const activeQueues = await this.queueRepository
+      .createQueryBuilder('queue')
+      .leftJoinAndSelect('queue.appointment', 'appointment')
+      .where('queue.doctor_id = :doctorId', {
+        doctorId: queue.doctorId,
+      })
+      .andWhere('queue.clinic_id = :clinicId', {
+        clinicId: queue.clinicId,
+      })
+      .andWhere('appointment.requested_date = :today', {
+        today,
+      })
+      .andWhere('queue.status IN (:...statuses)', {
+        statuses: [
+          QueueStatus.WAITING,
+          QueueStatus.CALLING,
+          QueueStatus.IN_PROGRESS,
+        ],
+      })
+      .getMany();
+
+    const orderedQueues = this.sortQueueEntries(activeQueues);
+
+    const index = orderedQueues.findIndex(
+      (item) => item.id === queue.id,
+    );
+
+    return index === -1 ? null : index + 1;
+  }
 
   async getPatientActiveQueue(
     currentUser: ActiveUserData,
-): Promise<Queue | null> {
+  ): Promise<Queue | null> {
     const start = startOfDay(nowDate());
     const end = endOfDay(nowDate());
+
     const queue = await this.queueRepository
-        .createQueryBuilder('queue')
-        .leftJoinAndSelect('queue.appointment', 'appointment')
-        .leftJoinAndSelect('appointment.patient', 'patient')
-        .leftJoinAndSelect('patient.user', 'patientUser')
-        .leftJoinAndSelect('queue.doctor', 'doctor')
-        .leftJoinAndSelect('doctor.user', 'doctorUser')
-        .leftJoinAndSelect('queue.clinic', 'clinic')
-        .where('patient.userId = :userId', { userId: currentUser.sub })
-        .andWhere('queue.status IN (:...statuses)', {
-            statuses: [
-                QueueStatus.WAITING,
-                QueueStatus.CALLING,
-                QueueStatus.IN_PROGRESS,
-            ],
-        })
-        .andWhere('queue.checkinTime BETWEEN :start AND :end', { start, end })
-        .orderBy('queue.checkinTime', 'DESC')
-        .getOne();
+      .createQueryBuilder('queue')
+      .leftJoinAndSelect('queue.appointment', 'appointment')
+      .leftJoinAndSelect('appointment.patient', 'patient')
+      .leftJoinAndSelect('patient.user', 'patientUser')
+      .leftJoinAndSelect('queue.doctor', 'doctor')
+      .leftJoinAndSelect('doctor.user', 'doctorUser')
+      .leftJoinAndSelect('queue.clinic', 'clinic')
+      .where('patient.userId = :userId', { userId: currentUser.sub })
+      .andWhere('queue.status IN (:...statuses)', {
+        statuses: [
+          QueueStatus.WAITING,
+          QueueStatus.CALLING,
+          QueueStatus.IN_PROGRESS,
+        ],
+      })
+      .andWhere('queue.checkinTime BETWEEN :start AND :end', {
+        start,
+        end,
+      })
+      .orderBy('queue.checkinTime', 'DESC')
+      .getOne();
 
-    if (!queue) return null;
-
-    const settings = await this.systemSettingRepository.findOne({
-        where: { id: 1 },
-    });
-    const duration =
-        Number((queue.doctor as any)?.averageConsultationTime) ||
-        settings?.defaultDuration ||
-        15;
-    queue.estimatedWaitMinutes = Math.max(
-        queue.estimatedWaitMinutes || 0,
-        queue.position * duration,
-    );
-
-    // ✅ تحويل requestedDate إلى string إذا كان من نوع Date
-    const requestedDateStr = typeof queue.appointment.requestedDate === 'string'
-        ? queue.appointment.requestedDate
-        : toDateString(queue.appointment.requestedDate);
-
-    const scheduled = combineDateAndTime(
-        requestedDateStr,
-        queue.appointment.startTime,
-    );
-
-    (queue as any).delay_from_appointment_minutes = queue.checkinTime
-        ? Math.max(
-            0,
-            Math.floor((queue.checkinTime.getTime() - scheduled.getTime()) / 60000),
-        )
-        : 0;
+    if (!queue) {
+      return null;
+    }
 
     return queue;
-}
+  }
+  private async resolveAppointmentDuration(
+    appointmentType: string | undefined,
+  ): Promise<number> {
+    const settings = await this.systemSettingRepository.findOne({
+      where: { id: 1 },
+    });
+
+    const normalizedType = appointmentType
+      ?.trim()
+      .toLowerCase()
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ');
+
+    switch (normalizedType) {
+      case 'initial visit':
+        return settings?.initialVisitDuration ?? 30;
+
+      case 'return visit':
+        return settings?.returnVisitDuration ?? 20;
+
+      case 'consultation':
+        return settings?.consultationDuration ?? 20;
+
+      case 'follow up':
+        return settings?.followUpDuration ?? 10;
+
+      case 'operation':
+        return settings?.operationDuration ?? 45;
+
+      default:
+        throw new BadRequestException(
+          `Unsupported appointment type: ${appointmentType ?? 'undefined'}`,
+        );
+    }
+  }
+  private async calculateDynamicEstimatedWaitMinutes(
+    queue: Queue,
+  ): Promise<number> {
+    const today = toDateString(nowDate());
+
+    const activeQueues = await this.queueRepository
+      .createQueryBuilder('queue')
+      .leftJoinAndSelect('queue.appointment', 'appointment')
+      .where('queue.doctor_id = :doctorId', {
+        doctorId: queue.doctorId,
+      })
+      .andWhere('queue.clinic_id = :clinicId', {
+        clinicId: queue.clinicId,
+      })
+      .andWhere('appointment.requested_date = :today', {
+        today,
+      })
+      .andWhere('queue.status IN (:...statuses)', {
+        statuses: [
+          QueueStatus.WAITING,
+          QueueStatus.CALLING,
+          QueueStatus.IN_PROGRESS,
+        ],
+      })
+      .getMany();
+
+    const orderedQueues = this.sortQueueEntries(activeQueues);
+
+    const currentIndex = orderedQueues.findIndex(
+      (item) => item.id === queue.id,
+    );
+
+    if (currentIndex <= 0) {
+      return 0;
+    }
+
+    let estimatedWaitMinutes = 0;
+
+    for (let index = 0; index < currentIndex; index++) {
+      const predecessor = orderedQueues[index];
+
+      if (
+        predecessor.status === QueueStatus.IN_PROGRESS &&
+        predecessor.startedTime
+      ) {
+        const expectedDuration =
+          await this.resolveAppointmentDuration(
+            predecessor.appointment?.type,
+          );
+
+        const elapsedMinutes = minutesDiff(
+          nowDate(),
+          predecessor.startedTime,
+        );
+
+        estimatedWaitMinutes += Math.max(
+          expectedDuration - elapsedMinutes,
+          0,
+        );
+
+        continue;
+      }
+
+      const duration = await this.resolveAppointmentDuration(
+        predecessor.appointment?.type,
+      );
+
+      estimatedWaitMinutes += duration;
+    }
+
+    return Math.max(
+      Math.round(estimatedWaitMinutes),
+      0,
+    );
+  }
   async getPatientLiveStatus(
     appointmentId: number,
     currentUser: ActiveUserData,
-  ): Promise<any> {
+  ): Promise<Queue> {
     const queue = await this.queueRepository.findOne({
       where: { appointmentId },
-      relations: ['appointment'],
+      relations: {
+        appointment: {
+          patient: true,
+        },
+      },
     });
 
     if (!queue) {
@@ -682,186 +1129,26 @@ const appointmentDateStr = toDateString(appointmentTime);
     }
 
     if (
-      queue.status === QueueStatus.COMPLETED ||
-      queue.status === QueueStatus.SKIPPED
+      Number(queue.appointment.patient?.userId) !==
+      Number(currentUser.sub)
     ) {
-      return {
-        status: queue.status,
-        currentPosition: queue.position,
-        patientsAhead: 0,
-        estimatedWaitMinutes: 0,
-      };
+      throw new ForbiddenException(
+        'You do not have permission to view this queue.',
+      );
     }
 
-    const startOfTodayDate = startOfDay(nowDate());
-    const endOfTodayDate = endOfDay(nowDate());
-
-    const patientsAhead = await this.queueRepository
-      .createQueryBuilder('queue')
-      .leftJoinAndSelect('queue.appointment', 'appointment')
-      .where('queue.doctorId = :doctorId', { doctorId: queue.doctorId })
-      .andWhere('queue.clinicId = :clinicId', { clinicId: queue.clinicId })
-      .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
-      .andWhere('queue.position < :position', { position: queue.position })
-      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
-        startOfToday: startOfTodayDate,
-        endOfToday: endOfTodayDate,
-      })
-      .orderBy('queue.position', 'ASC')
-      .getMany();
-
-    const settings = await this.systemSettingRepository.findOne({
-      where: { id: 1 },
-    });
-
-    let estimatedWaitMinutes = 0;
-    for (const patient of patientsAhead) {
-      const type = patient.appointment?.type;
-      let duration = settings?.defaultDuration ?? 15;
-
-      if (type === 'consultation') {
-        duration = settings?.consultationDuration ?? 20;
-      } else if (type === 'follow_up') {
-        duration = settings?.followUpDuration ?? 10;
-      } else if (type === 'operation') {
-        duration = settings?.operationDuration ?? 45;
-      }
-
-      estimatedWaitMinutes += duration;
-    }
-
-    const currentConsultation = await this.queueRepository.findOne({
-      where: {
-        doctorId: queue.doctorId,
-        status: QueueStatus.IN_PROGRESS,
-      },
-      relations: ['appointment'],
-    });
-
-    if (currentConsultation && currentConsultation.startedTime) {
-      const now = nowDate();
-      const elapsedMinutes = minutesDiff(now, currentConsultation.startedTime);
-
-      const type = currentConsultation.appointment?.type;
-      let expectedDuration = settings?.defaultDuration ?? 15;
-      if (type === 'consultation') {
-        expectedDuration = settings?.consultationDuration ?? 20;
-      } else if (type === 'follow_up') {
-        expectedDuration = settings?.followUpDuration ?? 10;
-      } else if (type === 'operation') {
-        expectedDuration = settings?.operationDuration ?? 45;
-      }
-
-      const remainingMinutes = Math.max(0, expectedDuration - elapsedMinutes);
-      estimatedWaitMinutes += remainingMinutes;
-    }
-
-    return {
-      status: queue.status,
-      currentPosition: queue.position,
-      patientsAhead: patientsAhead.length,
-      estimatedWaitMinutes: Math.round(estimatedWaitMinutes),
-      delay_from_appointment_minutes: this.calculatePatientQueueDelay(queue),
-    };
+    return queue;
   }
 
   // ============================================================
   // 🔟 calculateEstimatedWaitMinutes() - المعدلة
   // ============================================================
-  private async calculateEstimatedWaitMinutes(
-    clinicId: number,
-    doctorId: number,
-  ): Promise<number> {
-    const startOfTodayDate = startOfDay(nowDate());
-    const endOfTodayDate = endOfDay(nowDate());
 
-    const waitingPatients = await this.queueRepository
-      .createQueryBuilder('queue')
-      .leftJoinAndSelect('queue.appointment', 'appointment')
-      .where('queue.clinicId = :clinicId', { clinicId })
-      .andWhere('queue.doctorId = :doctorId', { doctorId })
-      .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
-      .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
-        startOfToday: startOfTodayDate,
-        endOfToday: endOfTodayDate,
-      })
-      .getMany();
-
-    const settings = await this.systemSettingRepository.findOne({
-      where: { id: 1 },
-    });
-
-    let totalWaitMinutes = 0;
-
-    for (const patient of waitingPatients) {
-      const type = patient.appointment?.type;
-      let duration = settings?.defaultDuration ?? 15;
-
-      if (type === 'consultation') {
-        duration = settings?.consultationDuration ?? 20;
-      } else if (type === 'follow_up') {
-        duration = settings?.followUpDuration ?? 10;
-      } else if (type === 'operation') {
-        duration = settings?.operationDuration ?? 45;
-      }
-
-      totalWaitMinutes += duration;
-    }
-
-    return totalWaitMinutes;
-  }
 
   // ============================================================
   // 1️⃣1️⃣ updateRemainingPatientsWaitTime() - المعدلة
   // ============================================================
-  private async updateRemainingPatientsWaitTime(
-    doctorId: number,
-    clinicId: number,
-    appointmentType: string | undefined,
-    actualDurationMinutes: number | null,
-  ): Promise<void> {
-    if (!actualDurationMinutes) {
-      return;
-    }
 
-    const settings = await this.systemSettingRepository.findOne({
-      where: { id: 1 },
-    });
-
-    let expectedDuration = settings?.defaultDuration ?? 15;
-    if (appointmentType === 'consultation') {
-      expectedDuration = settings?.consultationDuration ?? 20;
-    } else if (appointmentType === 'follow_up') {
-      expectedDuration = settings?.followUpDuration ?? 10;
-    } else if (appointmentType === 'operation') {
-      expectedDuration = settings?.operationDuration ?? 45;
-    }
-
-    const extraTime = actualDurationMinutes - expectedDuration;
-
-    if (extraTime > 0) {
-      const startOfTodayDate = startOfDay(nowDate());
-      const endOfTodayDate = endOfDay(nowDate());
-
-      const remainingPatients = await this.queueRepository
-        .createQueryBuilder('queue')
-        .where('queue.doctorId = :doctorId', { doctorId })
-        .andWhere('queue.clinicId = :clinicId', { clinicId })
-        .andWhere('queue.status = :status', { status: QueueStatus.WAITING })
-        .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
-          startOfToday: startOfTodayDate,
-          endOfToday: endOfTodayDate,
-        })
-        .orderBy('queue.position', 'ASC')
-        .getMany();
-
-      for (const patient of remainingPatients) {
-        patient.estimatedWaitMinutes =
-          (patient.estimatedWaitMinutes || 0) + extraTime;
-        await this.queueRepository.save(patient);
-      }
-    }
-  }
 
   // ============================================================
   // 1️⃣2️⃣ calculateTotalDelayForDoctor() - المعدلة
@@ -872,7 +1159,11 @@ const appointmentDateStr = toDateString(appointmentTime);
   ): Promise<number> {
     const startOfTodayDate = startOfDay(nowDate());
     const endOfTodayDate = endOfDay(nowDate());
-
+    const initialOpeningDelay = await this.calculateInitialOpeningDelay(
+      doctorId,
+      clinicId,
+      nowDate(),
+    );
     const completedPatients = await this.queueRepository
       .createQueryBuilder('queue')
       .leftJoinAndSelect('queue.appointment', 'appointment')
@@ -882,6 +1173,10 @@ const appointmentDateStr = toDateString(appointmentTime);
       .andWhere('queue.created_at BETWEEN :startOfToday AND :endOfToday', {
         startOfToday: startOfTodayDate,
         endOfToday: endOfTodayDate,
+      })
+      .andWhere('queue.finished_time IS NOT NULL')
+      .andWhere('queue.finished_time <= :now', {
+        now: nowDate(),
       })
       .getMany();
 
@@ -893,16 +1188,9 @@ const appointmentDateStr = toDateString(appointmentTime);
 
     for (const patient of completedPatients) {
       if (patient.actualDurationMinutes) {
-        const type = patient.appointment?.type;
-        let expectedDuration = settings?.defaultDuration ?? 15;
-
-        if (type === 'consultation') {
-          expectedDuration = settings?.consultationDuration ?? 20;
-        } else if (type === 'follow_up') {
-          expectedDuration = settings?.followUpDuration ?? 10;
-        } else if (type === 'operation') {
-          expectedDuration = settings?.operationDuration ?? 45;
-        }
+        const expectedDuration = await this.resolveAppointmentDuration(
+          patient.appointment?.type,
+        );
 
         const delay = Math.max(
           0,
@@ -912,23 +1200,87 @@ const appointmentDateStr = toDateString(appointmentTime);
       }
     }
 
-    return totalDelay;
+    return initialOpeningDelay + totalDelay;;
   }
+  private sortQueueEntries(queues: Queue[]): Queue[] {
+    return queues.sort((a, b) => {
+      // IN_PROGRESS أولاً
+      if (
+        a.status === QueueStatus.IN_PROGRESS &&
+        b.status !== QueueStatus.IN_PROGRESS
+      ) {
+        return -1;
+      }
 
-    // ============================================================
+      if (
+        b.status === QueueStatus.IN_PROGRESS &&
+        a.status !== QueueStatus.IN_PROGRESS
+      ) {
+        return 1;
+      }
+
+      // CALLING بعد IN_PROGRESS
+      if (
+        a.status === QueueStatus.CALLING &&
+        b.status !== QueueStatus.CALLING
+      ) {
+        return -1;
+      }
+
+      if (
+        b.status === QueueStatus.CALLING &&
+        a.status !== QueueStatus.CALLING
+      ) {
+        return 1;
+      }
+
+      // NORMAL قبل LATE
+      if (a.priorityGroup !== b.priorityGroup) {
+        return a.priorityGroup === QueuePriorityGroup.NORMAL ? -1 : 1;
+      }
+
+      // NORMAL: حسب موعد الحجز ثم check-in ثم id
+      if (a.priorityGroup === QueuePriorityGroup.NORMAL) {
+        const aAppointmentTime = a.appointment
+          ? combineDateAndTime(
+            typeof a.appointment.requestedDate === 'string'
+              ? a.appointment.requestedDate
+              : toDateString(a.appointment.requestedDate),
+            a.appointment.startTime,
+          ).getTime()
+          : Number.MAX_SAFE_INTEGER;
+
+        const bAppointmentTime = b.appointment
+          ? combineDateAndTime(
+            typeof b.appointment.requestedDate === 'string'
+              ? b.appointment.requestedDate
+              : toDateString(b.appointment.requestedDate),
+            b.appointment.startTime,
+          ).getTime()
+          : Number.MAX_SAFE_INTEGER;
+
+        if (aAppointmentTime !== bAppointmentTime) {
+          return aAppointmentTime - bAppointmentTime;
+        }
+      }
+
+      // LATE أو عند تساوي موعد NORMAL:
+      // check-in ثم id
+      const aCheckin = a.checkinTime?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bCheckin = b.checkinTime?.getTime() ?? Number.MAX_SAFE_INTEGER;
+
+      if (aCheckin !== bCheckin) {
+        return aCheckin - bCheckin;
+      }
+
+      return a.id - b.id;
+    });
+  }
+  // ============================================================
   // تحديد المريض التالي ضمن قائمة مرتبة (يُستدعى بعد أي getMany على الطابور)
   // ============================================================
-  private markNextPatient(queues: Queue[]): void {
-    const nextWaiting = queues
-      .filter((q) => q.status === QueueStatus.WAITING)
-      .sort((a, b) => a.position - b.position)[0];
 
-    if (nextWaiting) {
-      nextWaiting.isNext = true;
-    }
-  }
-
-    // ============================================================
+  // ============================================================
   // getQueueMetrics() - إحصائيات حية للطابور
   // ============================================================
   async getQueueMetrics(query: QueueQueryDto): Promise<{
