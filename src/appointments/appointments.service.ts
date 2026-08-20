@@ -888,12 +888,6 @@ export class AppointmentsService {
     //r
     return result.appointment;
   }
-  async checkInAppointment(
-    id: number,
-    currentUser: ActiveUserData,
-  ): Promise<any> {
-    return this.queuesService.createQueueEntry(id, currentUser);
-  }
 
   async completeAppointment(
     id: number,

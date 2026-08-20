@@ -146,14 +146,7 @@ getAppointmentDayStatus(
     return this.appointmentsService.completeAppointment(id, currentUser);
   }
 
-  @Patch(':id/check-in')
-  @Roles(UserRole.DOCTOR)
-  checkInAppointment(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() currentUser: ActiveUserData,
-  ): Promise<Appointment> {
-    return this.appointmentsService.checkInAppointment(id, currentUser);
-  }
+
 
   @Patch(':id/no-show')
   @Roles(UserRole.DOCTOR)
