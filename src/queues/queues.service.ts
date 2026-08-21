@@ -862,10 +862,15 @@ export class QueuesService {
       const appointment = await transactionalAppointmentRepo.findOne({
         where: { id: queue.appointmentId },
       });
-
       if (!appointment) {
         throw new NotFoundException('Appointment not found.');
       }
+      appointment.status = 'completed';
+      appointment.actualEndTime = nowDate();
+
+      await transactionalAppointmentRepo.save(appointment);
+
+
 
       const patient = await transactionalPatientRepo.findOne({
         where: { id: appointment.patientId },
