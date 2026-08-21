@@ -1838,7 +1838,7 @@ export class AppointmentsService {
 
   // Start from the beginning of the schedule for future dates.
   // For today's date, never start from a time that has already passed.
-  const today = todayDateString();
+  /*const today = todayDateString();
 
   let start = schedule.startTime;
 
@@ -1856,6 +1856,31 @@ export class AppointmentsService {
       start = currentTime;
     }
   }
+    */
+   // Start from the beginning of the schedule for future dates.
+// For today's date, never start from the current time directly.
+// Give the patient a 3-minute safety window.
+const today = todayDateString();
+
+let start = schedule.startTime;
+
+if (dto.requestedDate === today) {
+  const currentTime = `${currentTimeString()}:00`;
+
+  // If the current time is already after the schedule, no slot is available.
+  if (currentTime >= schedule.endTime) {
+    throw new BadRequestException('No available time in this schedule');
+  }
+
+  // Start from the later of:
+  // 1. schedule start
+  // 2. current time + 3 minutes
+  const minimumBookingStart = addMinutesToTime(currentTime, 3);
+
+  if (minimumBookingStart > start) {
+    start = minimumBookingStart;
+  }
+}
 
   for (const interval of blockedIntervals) {
     const candidateEnd = addMinutesToTime(start, duration);
