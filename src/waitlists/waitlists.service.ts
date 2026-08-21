@@ -9,7 +9,7 @@ import { DoctorLeave } from "../doctor-leaves/entities/doctor-leaves.entity";
 import { MoreThanOrEqual, Raw, Repository } from "typeorm";
 import { SystemSettingsService } from "../system-setting/system-settings.service";
 import { CreateWaitlistDto } from "./dto/create-waitlist.dto";
-import { addMinutesToTime, getDayOfWeek, nowDate, toDateOnly } from "../common/utils/date-utils";
+import { addMinutesToTime, currentTimeString, getDayOfWeek, nowDate, toDateOnly, todayDateString } from "../common/utils/date-utils";
 import {
     BadRequestException,
 } from "@nestjs/common";
@@ -159,7 +159,9 @@ export class WaitlistService {
         });
 
         const workingSchedules = schedules.filter(
-            (schedule) => schedule.type !== DoctorScheduleType.BREAK,
+            (schedule) =>
+                schedule.type !== DoctorScheduleType.BREAK &&
+                schedule.type !== DoctorScheduleType.OPERATION,
         );
 
         // لا يجب أن نصل لهذه الحالة إذا كان joinWaitlist يتحقق من وجود Schedule
@@ -260,16 +262,46 @@ export class WaitlistService {
                 a.start.localeCompare(b.start),
             );
 
+            // Start from the beginning of the schedule.
             let start = schedule.startTime;
 
+            // If this is today, ignore all past time
+            // and keep a 3-minute safety buffer.
+            if (requestedDate === todayDateString()) {
+                const currentTime = `${currentTimeString()}:00`;
+                const minimumStart = addMinutesToTime(currentTime, 3);
+
+                if (minimumStart > start) {
+                    start = minimumStart;
+                }
+
+                // No future time remains in this schedule.
+                if (start >= schedule.endTime) {
+                    continue;
+                }
+            }
+
             for (const interval of blockedIntervals) {
+                // This interval has already ended before our search point.
+                if (interval.end <= start) {
+                    continue;
+                }
+
+                // If the interval starts before our current search point,
+                // continue searching immediately after the interval.
+                if (interval.start < start) {
+                    start = interval.end;
+                    continue;
+                }
+
                 const candidateEnd = addMinutesToTime(start, duration);
 
-                // وجدنا فراغاً يكفي لحجز أقل موعد
+                // There is enough free time before this blocked interval.
                 if (candidateEnd <= interval.start) {
                     return false;
                 }
 
+                // Candidate overlaps this blocked interval.
                 if (
                     this.isOverlap(
                         start,
@@ -284,6 +316,7 @@ export class WaitlistService {
 
             const end = addMinutesToTime(start, duration);
 
+            // There is enough free time at the end of the schedule.
             if (end <= schedule.endTime) {
                 return false;
             }
