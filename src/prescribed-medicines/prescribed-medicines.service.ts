@@ -286,8 +286,14 @@ export class PrescribedMedicinesService {
                 patientProfileId: patient.id,
             },
         });
-        if (!medicalProfile) {
+        /*if (!medicalProfile) {
             throw new NotFoundException('Medical profile not found');
+        }*/
+        if (!medicalProfile) {
+            return {
+                profileMedicines: [],
+                historyMedicines: [],
+            };
         }
         const histories = await this.medicalHistoryRepository.find({
             where: {
