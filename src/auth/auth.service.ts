@@ -41,6 +41,7 @@ import { MailService } from '../mail/mail.service';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { WalletStatus } from '../wallets/enums/wallet-status.enum';
 import { toDateOnly, nowDate, addMinutes } from '../common/utils/date-utils';
+import { PatientProfile } from '../patients/entities/patient-profile.entity';
 
 type RefreshTokenPayload = Pick<JWTPayloadType, 'sub' | 'version'>;
 type AccountStatus = {
@@ -67,7 +68,9 @@ export class AuthService {
     private readonly mailService: MailService,
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
-  ) {}
+    @InjectRepository(PatientProfile)
+    private readonly patientProfileRepository: Repository<PatientProfile>,
+  ) { }
 
   async register(registerDto: RegisterDto): Promise<User> {
     const normalizedEmail = this.normalizeEmail(registerDto.email);
@@ -161,6 +164,15 @@ export class AuthService {
     });
 
     const savedUser = await this.userRepository.save(user);
+    await this.patientProfileRepository.save(
+      this.patientProfileRepository.create({
+        userId: savedUser.id,
+        maritalStatus: null,
+        occupation: null,
+        emergencyContactName: null,
+        emergencyContactPhone: null,
+      }),
+    );
     await this.walletRepository.save(
       this.walletRepository.create({
         userId: savedUser.id,
